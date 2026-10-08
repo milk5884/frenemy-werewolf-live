@@ -1,0 +1,9 @@
+{
+  "name": "frenemy-werewolf-live",
+  "private": true,
+  "type": "module",
+  "version": "2.0.0",
+  "dependencies": {
+    "@vercel/blob": "^2.0.0"
+  }
+}
