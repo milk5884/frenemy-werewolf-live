@@ -1,30 +1,35 @@
 import { URL } from 'node:url';
 import { createRoomPersisted, loadRoom, updateRoom, storageMode } from '../lib/storage.js';
-import { ROLE_LABELS, token, id, createRoom, publicRoom, hostView, playerView, computeSurveyResults, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound } from '../lib/game.js';
+import { ROLE_LABELS, token, id, createRoom, publicRoom, hostView, playerView, computeSurveyResults, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount } from '../lib/game.js';
 
 function send(res,status,obj){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store, max-age=0');res.end(JSON.stringify(obj));}
 async function body(req){if(req.body&&typeof req.body==='object')return req.body;let d='';for await(const c of req){d+=c;if(d.length>2e6)throw new Error('リクエストが大きすぎます');}return d?JSON.parse(d):{};}
 function authHost(room,url){return room&&url.searchParams.get('token')===room.hostToken;}
 function apiPathOf(url){const routed=url.pathname==='/api/router'?url.searchParams.get('__path'):'';return routed?`/api/${routed.replace(/^\/+|\/+$/g,'')}`:url.pathname;}
 function partsOf(url){return apiPathOf(url).split('/').filter(Boolean);}
-function makeDefaultVotes(room){
+function makeDefaultVotes(room,offset=0){
   const ids=room.roster.map(c=>c.id);
   const votes={};
   for(const theme of room.themes){
-    votes[theme.id]=[ids[0],ids[1],ids[2]].filter(Boolean);
+    votes[theme.id]=[ids[offset%ids.length],ids[(offset+1)%ids.length],ids[(offset+2)%ids.length]].filter(Boolean);
   }
   return votes;
+}
+function validateSurveyVotes(room,votes){
+  for(const theme of room.themes){
+    const v=votes?.[theme.id];
+    if(!Array.isArray(v)||v.length!==3||new Set(v).size!==3||v.some(cid=>!byCast(room,cid)))throw new Error(`「${theme.title}」のTOP3を重複なしで選んでください`);
+  }
 }
 function ensureTestReady(room){
   if(room.started)throw new Error('ゲーム開始後はテスト準備できません');
   if(room.roster.length<5)throw new Error('出演者は5人以上必要です');
   if(room.themes.length<1)throw new Error('テーマを1つ以上設定してください');
-  for(const cast of room.roster){
+  room.roster.forEach((cast,i)=>{
     if(!room.joins[cast.id])room.joins[cast.id]={castId:cast.id,token:token(),joinedAt:Date.now(),roleSeen:false,testAuto:true};
-  }
-  if(!Object.keys(room.surveySubmissions||{}).length){
-    room.surveySubmissions.test_auto={nickname:'テスト回答',votes:makeDefaultVotes(room),at:Date.now(),testAuto:true};
-  }
+    const key=playerSurveyKey(cast.id);
+    if(!room.surveySubmissions[key])room.surveySubmissions[key]={nickname:cast.name,votes:makeDefaultVotes(room,i),at:Date.now(),castId:cast.id,playerSurvey:true,testAuto:true};
+  });
   if(!room.surveyFinalized)finalizeSurvey(room);
 }
 
@@ -52,7 +57,10 @@ export default async function handler(req,res){
           if(b.discussionSeconds)r.discussionSeconds=Math.max(60,Number(b.discussionSeconds));for(const cid of Object.keys(r.joins))if(!r.roster.some(c=>c.id===cid))delete r.joins[cid];r.surveySubmissions={};r.surveyFinalized=false;return {view:'host'};
         }
         if(parts[4]==='test-ready'&&req.method==='POST'){ensureTestReady(r);return{view:'host'};}
-        if(parts[4]==='finalize-survey'&&req.method==='POST'){if(!Object.keys(r.surveySubmissions).length)throw new Error('アンケート回答がまだありません');finalizeSurvey(r);return{view:'host'};}
+        if(parts[4]==='finalize-survey'&&req.method==='POST'){
+          if(playerSurveyCount(r)<r.roster.length)throw new Error(`出演者アンケートが未回答です（${playerSurveyCount(r)}/${r.roster.length}人）`);
+          finalizeSurvey(r);return{view:'host'};
+        }
         if(parts[4]==='start'&&req.method==='POST'){startGame(r);return{view:'host'};}
         if(parts[4]==='phase'&&req.method==='POST'){const b=await body(req),allowed=['roleReveal','theme','frenemyInfo','seer','discussion','finalVote','result','attack','suspectVote','roundEnd','gameOver'];if(!allowed.includes(b.phase))throw new Error('無効なフェーズ');setPhase(r,b.phase);return{view:'host'};}
         if(parts[4]==='resolve-attack'&&req.method==='POST'){const victim=resolveAttack(r);r.history.push({round:r.roundIndex,kind:'attack',castId:victim.id,name:victim.name});return{json:{victim:victim.name,game:maybeGameOver(r)}};}
@@ -80,6 +88,13 @@ export default async function handler(req,res){
     if(parts[3]==='player'){
       const ptoken=url.searchParams.get('token'), join=joinedByToken(room,ptoken);if(!join)return send(res,403,{error:'参加認証に失敗しました'});if(parts.length===4&&req.method==='GET')return send(res,200,playerView(room,join));
       const result=await updateRoom(code,async r=>{const j=joinedByToken(r,ptoken);if(!j)throw Object.assign(new Error('参加認証に失敗しました'),{status:403});const cast=byCast(r,j.castId);
+        if(parts[4]==='survey'&&req.method==='POST'){
+          if(r.started||r.phase!=='lobby')throw new Error('アンケート回答の受付は終了しています');
+          const b=await body(req); validateSurveyVotes(r,b.votes);
+          r.surveySubmissions[playerSurveyKey(cast.id)]={nickname:cast.name,votes:b.votes,at:Date.now(),castId:cast.id,playerSurvey:true};
+          r.surveyFinalized=false;
+          return{json:{ok:true,count:Object.keys(r.surveySubmissions).length,playerSurveyCount:playerSurveyCount(r)}};
+        }
         if(parts[4]==='role-seen'&&req.method==='POST'){j.roleSeen=true;return{json:{ok:true}};}
         if(parts[4]==='seer'&&req.method==='POST'){if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');if(r.seerChecks[r.roundIndex])throw new Error('このラウンドではすでに占っています');const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;if(rank<1)throw new Error('順位が見つかりません');r.seerChecks[r.roundIndex]={seerId:cast.id,targetId:b.targetId,rank};return{json:{targetName:byCast(r,b.targetId)?.name,rank}};}
         if(parts[4]==='final-vote'&&req.method==='POST'){if(!cast.alive||r.phase!=='finalVote')throw new Error('現在は最終投票できません');const b=await body(req);if(!byCast(r,b.targetId))throw new Error('無効な投票先です');r.finalVotes[cast.id]=b.targetId;return{json:{ok:true}};}
@@ -98,8 +113,8 @@ export default async function handler(req,res){
           if(r.surveyFinalized)throw new Error('このアンケートは締め切られています');
           if(!b.deviceId)throw new Error('端末IDがありません');
           if(r.surveySubmissions[b.deviceId])return{json:{ok:true,count:Object.keys(r.surveySubmissions).length,alreadySubmitted:true}};
-          for(const theme of r.themes){const v=b.votes?.[theme.id];if(!Array.isArray(v)||v.length!==3||new Set(v).size!==3||v.some(cid=>!byCast(r,cid)))throw new Error(`「${theme.title}」のTOP3を重複なしで選んでください`);}
-          r.surveySubmissions[b.deviceId]={nickname:String(b.nickname||'').slice(0,40),votes:b.votes,at:Date.now()};
+          validateSurveyVotes(r,b.votes);
+          r.surveySubmissions[b.deviceId]={nickname:String(b.nickname||'').slice(0,40),votes:b.votes,at:Date.now(),externalSurvey:true};
           return{json:{ok:true,count:Object.keys(r.surveySubmissions).length}};
         });
         return send(res,200,result.value.json);
