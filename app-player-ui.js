@@ -1,75 +1,119 @@
+function appScreen(state, opts={}){
+  const me=state.player || {};
+  const phase=phaseLabels[state.phase]||state.phase;
+  const status=me.alive===false?'脱落済み':'参加中';
+  const theme=state.theme?.title;
+  const role=me.roleLabel||roleMeta[me.role]?.label||'';
+  const roleHtml=me.role?`${roleIcon(me.role)} ${esc(role)}`:'';
+  return `<section class="app-screen ${opts.tone?`app-screen-${opts.tone}`:''}">
+    <div class="app-screen-head">
+      <div><div class="app-overline">${esc(opts.kicker||phase)}</div><h1>${esc(opts.title||phase)}</h1>${opts.subtitle?`<p>${esc(opts.subtitle)}</p>`:''}</div>
+      <div class="app-round-badge">R${Number(state.roundIndex||0)+1}</div>
+    </div>
+    ${theme?`<div class="app-theme-chip"><span>テーマ</span><b>${esc(theme)}</b></div>`:''}
+    ${opts.body||''}
+    <div class="app-player-strip"><span>${esc(me.name||'')}</span><span>${roleHtml}</span><span>${esc(status)}</span></div>
+  </section>`;
+}
+function waitCard(title,text='',icon='⏳'){
+  return `<div class="app-message"><div class="app-message-icon">${esc(icon)}</div><h2>${esc(title)}</h2>${text?`<p>${esc(text)}</p>`:''}</div>`;
+}
+function actionPanel(inner){return `<div class="app-action-panel">${inner}</div>`;}
+function selectOptions(casts,selected){return casts.map(c=>`<option value="${c.id}"${selectedAttr(c.id,selected)}>${esc(c.name)}</option>`).join('');}
+function alivePlayers(state){return state.roster.filter(c=>c.alive);}
 function playerPhaseHtml(state){
-  const me=state.player; const theme=state.theme;
-  if(state.phase==='lobby'){
-    if(!state.surveySubmitted){
-      return `<section class="hero compact"><div class="eyebrow">PLAYER SURVEY</div><h1>${esc(me.name)}さんの事前アンケート</h1><p>ゲーム開始前に、各テーマでTOP3を選んでください。この集計結果がフレネミーのターゲットになります。</p></section>${playerSurveyHtml(state)}`;
-    }
-    return `<section class="card center"><div class="metric good">参加・アンケート完了</div><p>ホストがアンケート結果を確定し、ゲームを開始するまでこの画面のままお待ちください。</p><p class="muted">出演者アンケート ${state.playerSurveyCount||0} / ${state.roster.length}</p></section>`;
-  }
-  if(state.phase==='roleReveal'){
-    if(!me.roleSeen) return `<section class="card"><div class="role-card"><span class="role-icon large locked-card"><span>?</span></span><div class="kicker">SECRET ROLE</div><div class="role-name locked">フレネミー</div><p>周りから画面が見えないことを確認してください。</p><button class="big" id="revealRole">役職を見る</button></div></section>`;
-    return `<section class="card">${roleCard(state)}<div class="center"><p>確認できたら、そのままお待ちください。</p></div></section>`;
-  }
-  if(state.phase==='gameOver'){
-    return `<section class="card center"><div class="kicker">GAME OVER</div><div class="theme-title">役職公開</div><div class="list" style="text-align:left">${state.roster.map(c=>{const r=roleMeta[c.role]||roleMeta.citizen;return `<div class="row"><div class="row-title ${c.alive?'':'dead'}">${esc(c.name)}</div><div class="pill ${r.cls}">${roleIcon(c.role)} ${esc(c.roleLabel||r.label)}</div></div>`}).join('')}</div></section>`;
-  }
-  const dead=!me.alive;
+  const me=state.player; const dead=!me.alive;
   const seerDraft=getDraft(state,'seer');
   const finalDraft=getDraft(state,'final');
   const attackDraft=getDraft(state,'attack');
   const suspectDraft=getDraft(state,'suspect');
-  let top=`<section class="phase"><div class="kicker">ROUND ${state.roundIndex+1} · ${esc(phaseLabels[state.phase]||state.phase)}</div>${theme?`<div class="theme-title">${esc(theme.title)}</div>`:''}<div class="mini-status"><span>${esc(state.title||'フレネミー人狼')}</span><span>${dead?'脱落済み':'参加中'}</span></div>${dead?`<div class="pill">あなたは脱落済み</div>`:''}</section>`;
+  if(state.phase==='lobby'){
+    if(!state.surveySubmitted){
+      return appScreen(state,{kicker:'PLAYER SURVEY',title:`${me.name}さんの事前アンケート`,subtitle:'各テーマでTOP3を選ぶと、ゲーム開始準備が進みます。',tone:'survey',body:`${playerSurveyHtml(state)}`});
+    }
+    return appScreen(state,{kicker:'READY',title:'準備完了',subtitle:`出演者アンケート ${state.playerSurveyCount||0} / ${state.roster.length}`,tone:'ready',body:waitCard('開始までお待ちください','ホストがアンケートを確定するとゲームが始まります。','✓')});
+  }
+  if(state.phase==='roleReveal'){
+    if(!me.roleSeen){
+      return appScreen(state,{kicker:'SECRET ROLE',title:'役職確認',subtitle:'周りから画面が見えないことを確認してください。',tone:'secret',body:actionPanel(`<div class="role-card app-role-lock"><span class="role-icon large locked-card"><span>?</span></span><h2>あなたの役職</h2><p>この情報は自分だけが確認します。</p><button class="big full" id="revealRole">役職を見る</button></div>`)});
+    }
+    return appScreen(state,{kicker:'ROLE CONFIRMED',title:'役職を確認しました',subtitle:'開始までそのままお待ちください。',tone:'ready',body:`<div class="app-role-card">${roleIcon(me.role,'large')}<div class="app-overline">YOUR ROLE</div><h2>${esc(me.roleLabel)}</h2><p>${esc((roleMeta[me.role]||{}).desc||'')}</p>${me.role==='frenemy'&&state.frenemyPartners?.length?`<div class="app-info-line"><span>仲間</span><b>${state.frenemyPartners.map(x=>esc(x.name)).join(' / ')}</b></div>`:''}</div>`});
+  }
+  if(state.phase==='gameOver'){
+    return appScreen(state,{kicker:'GAME OVER',title:'役職公開',tone:'result',body:`<div class="app-reveal-list">${state.roster.map(c=>{const r=roleMeta[c.role]||roleMeta.citizen;return `<div class="app-reveal-row ${c.alive?'':'dead'}"><span>${esc(c.name)}</span><b>${roleIcon(c.role)} ${esc(c.roleLabel||r.label)}</b></div>`}).join('')}</div>`});
+  }
   let body='';
-  if(state.phase==='theme') body=`${sceneCard('☀️','朝が来ました','新しいラウンドのテーマを確認してください。')}<section class="card center"><h2>テーマを確認</h2><p>このあとフレネミー情報、占いの順に進みます。</p></section>`;
+  if(state.phase==='theme'){
+    body=waitCard('テーマを確認','このあと秘密情報と能力確認へ進みます。','☀️');
+    return appScreen(state,{kicker:'NEW ROUND',title:'朝が来ました',subtitle:'新しいラウンドの開始です。',tone:'day',body});
+  }
   if(state.phase==='frenemyInfo'){
-    if(me.role==='frenemy'&&me.alive) body=`<section class="secret center"><div class="kicker">FRENEMY ONLY</div><h2>脱落者を除いた現在1位</h2><div class="theme-title accent">${esc(state.frenemyTarget||'—')}</div><p>この人物を、最終投票で1位から落としてください。この情報はフレネミーだけに表示されます。</p></section>`;
-    else body=`<section class="card center"><h2>秘密情報の確認中</h2><p>あなたに新しい情報はありません。フレネミーだけが秘密のターゲットを確認しています。</p></section>`;
+    if(me.role==='frenemy'&&me.alive){
+      body=`<div class="app-target-card"><span>今回落とすターゲット</span><h2>${esc(state.frenemyTarget||'—')}</h2><p>脱落者を除いた現在1位です。</p></div>`;
+      return appScreen(state,{kicker:'FRENEMY ONLY',title:'秘密情報',subtitle:'この画面はフレネミーだけに表示されています。',tone:'secret',body});
+    }
+    return appScreen(state,{kicker:'SECRET CHECK',title:'待機中',subtitle:'秘密情報の確認が行われています。',tone:'wait',body:waitCard('あなたに新しい情報はありません','次のフェーズまでお待ちください。','…')});
   }
   if(state.phase==='seer'){
     if(me.role==='seer'&&me.alive){
-      if(state.seerCheck) body=`<section class="secret center"><div class="kicker">占い結果</div><div class="theme-title">${esc(state.seerCheck.targetName)}</div><div class="metric">事前 ${state.seerCheck.rank}位</div><p>この情報を公開するか、隠すかは自由です。</p></section>`;
-      else body=`<section class="card"><h2>🔮 占う人物を1人選ぶ</h2><p>議論が始まる前に、今回の事前アンケート順位を1人だけ確認できます。</p><div class="field"><select id="seerTarget"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}"${selectedAttr(c.id,seerDraft)}>${esc(c.name)}</option>`).join('')}</select></div><button class="big full" id="seerBtn">この人を占う</button></section>`;
-    }else body=`<section class="card center"><h2>占いの時間</h2><p>${dead?'脱落しているため能力・投票には参加できません。':'占い師が秘密裏に1人を確認しています。'}</p></section>`;
+      if(state.seerCheck){
+        body=`<div class="app-target-card"><span>占い結果</span><h2>${esc(state.seerCheck.targetName)}</h2><p>事前アンケート ${state.seerCheck.rank}位</p></div>`;
+        return appScreen(state,{kicker:'FORTUNE RESULT',title:'占い結果',subtitle:'この情報を話すか隠すかは自由です。',tone:'secret',body});
+      }
+      body=actionPanel(`<label class="app-select-label">占う人物<select id="seerTarget"><option value="">選択してください</option>${selectOptions(state.roster,seerDraft)}</select></label><button class="big full" id="seerBtn">この人を占う</button>`);
+      return appScreen(state,{kicker:'FORTUNE TELLER',title:'1人を占う',subtitle:'議論前に、1人の事前順位を確認できます。',tone:'action',body});
+    }
+    return appScreen(state,{kicker:'FORTUNE TIME',title:'占いの時間',subtitle:dead?'脱落中のため参加できません。':'占い師が確認しています。',tone:'wait',body:waitCard('確認中','次のフェーズまでお待ちください。','🔮')});
   }
   if(state.phase==='discussion'){
     const left=state.timerEndsAt?Math.max(0,(state.timerEndsAt-Date.now())/1000):0;
-    const skipText=`議論スキップ ${state.discussionSkipCount||0} / ${state.roster.filter(c=>c.alive).length}`;
-    const skipHtml=dead?`<div class="pill">脱落済みのためスキップ投票できません</div>`:state.discussionSkipped?`<button class="secondary full" disabled>議論スキップ送信済み</button>`:`<button class="secondary full" id="discussionSkipBtn">議論をスキップ</button>`;
-    body=`<section class="card center"><div class="kicker">DISCUSSION</div><div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(left)}</div><p>誰が本心で話していて、誰がランキングを操作しているのか。</p><div class="skip-box"><div class="kicker">AUTO SKIP</div><p class="muted">オート進行ON時は、生存者全員が押すと人気順位投票へ進みます。</p><div class="metric">${esc(skipText)}</div>${skipHtml}</div>${me.role==='frenemy'&&state.frenemyTarget?`<div class="secret"><div class="kicker">あなたのターゲット</div><h2>${esc(state.frenemyTarget)}</h2><p class="muted">脱落者を除いた現在1位です。</p></div>`:''}${me.role==='seer'&&state.seerCheck?`<div class="secret"><div class="kicker">あなたの占い結果</div><h3>${esc(state.seerCheck.targetName)}：事前 ${state.seerCheck.rank}位</h3></div>`:''}</section>`;
+    const skipText=`${state.discussionSkipCount||0} / ${alivePlayers(state).length}`;
+    const skipButton=dead?`<button class="secondary full" disabled>脱落中</button>`:state.discussionSkipped?`<button class="secondary full" disabled>スキップ送信済み</button>`:`<button class="secondary full" id="discussionSkipBtn">議論をスキップ</button>`;
+    body=`<div class="app-timer-card"><span>残り時間</span><div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(left)}</div></div><div class="app-two-stack">${me.role==='frenemy'&&state.frenemyTarget?`<div class="app-mini-secret"><span>ターゲット</span><b>${esc(state.frenemyTarget)}</b></div>`:''}${me.role==='seer'&&state.seerCheck?`<div class="app-mini-secret"><span>占い結果</span><b>${esc(state.seerCheck.targetName)}：${state.seerCheck.rank}位</b></div>`:''}</div>${actionPanel(`<div class="app-info-line"><span>スキップ</span><b>${esc(skipText)}</b></div>${skipButton}`)}`;
+    return appScreen(state,{kicker:'DISCUSSION',title:'議論タイム',subtitle:'誰がランキングを動かしているか話し合いましょう。',tone:'talk',body});
   }
   if(state.phase==='finalVote'){
-    if(dead) body=`<section class="card center"><h2>ランキング投票</h2><p>脱落しているため投票権はありません。</p></section>`;
-    else if(state.votedFinal) body=`<section class="card center"><div class="metric good">投票完了</div><p>全員の投票が終わるまでお待ちください。</p></section>`;
-    else body=`<section class="card"><h2>最終投票</h2><p>今回のテーマで「1位」だと思う人物を選んでください。自分への投票も可能です。</p><div class="field"><select id="finalTarget"><option value="">選択してください</option>${state.roster.filter(c=>c.alive).map(c=>`<option value="${c.id}"${selectedAttr(c.id,finalDraft)}>${esc(c.name)}</option>`).join('')}</select><div class="field-hint">選択中の候補は自動更新が入っても保持されます。</div></div><button class="big full" id="finalVoteBtn">投票を確定</button></section>`;
+    if(dead) return appScreen(state,{kicker:'RANKING VOTE',title:'ランキング投票',subtitle:'脱落中のため投票権はありません。',tone:'wait',body:waitCard('投票待機','結果をお待ちください。','🗳️')});
+    if(state.votedFinal) return appScreen(state,{kicker:'VOTED',title:'投票完了',subtitle:'全員の投票が終わるまでお待ちください。',tone:'ready',body:waitCard('送信しました','投票内容は反映されています。','✓')});
+    body=actionPanel(`<label class="app-select-label">1位だと思う人物<select id="finalTarget"><option value="">選択してください</option>${selectOptions(alivePlayers(state),finalDraft)}</select></label><button class="big full" id="finalVoteBtn">投票を確定</button>`);
+    return appScreen(state,{kicker:'RANKING VOTE',title:'1位を選ぶ',subtitle:'今回のテーマで一番当てはまる人物を選んでください。',tone:'action',body});
   }
-  if(state.phase==='result' && state.roundResult){
+  if(state.phase==='result'&&state.roundResult){
     const rr=state.roundResult; const success=rr.success;
-    body=`${sceneCard(success?'😈':'🛡️',success?'フレネミー成功':'フレネミー失敗',success?'現在1位を最終投票1位から落としました。':'現在1位が最終投票でも守られました。')}<section class="card center"><div class="kicker">ROUND RESULT</div><h2>今回のターゲット</h2><div class="theme-title">${esc(rr.officialTopName)}</div><p>最終投票1位：${rr.winnerNames.map(esc).join(' / ')||'—'}</p>${voteResultTable(rr)}<div class="result-win ${success?'bad':'good'}">${success?'😈 フレネミー成功':'🛡️ フレネミー失敗'}</div></section>`;
+    body=`<div class="app-result-hero ${success?'bad':'good'}"><span>${success?'😈':'🛡️'}</span><h2>${success?'フレネミー成功':'フレネミー失敗'}</h2><p>ターゲット：${esc(rr.officialTopName||'—')}</p></div>${voteResultTable(rr)}`;
+    return appScreen(state,{kicker:'ROUND RESULT',title:'結果発表',subtitle:`最終投票1位：${rr.winnerNames.map(esc).join(' / ')||'—'}`,tone:'result',body});
   }
   if(state.phase==='attack'){
-    if(state.roundResult) body+=`${sceneCard('🌙','夜になりました','フレネミーが襲撃先を選ぶ時間です。')}`;
     if(me.role==='frenemy'&&me.alive){
-      if(state.attacked) body+=`<section class="card center"><h2>襲撃先を選択済み</h2><p>もう1人のフレネミーと一致すると襲撃が成立します。</p></section>`;
-      else { const partners=new Set((state.frenemyPartners||[]).map(x=>x.id)); const targets=state.roster.filter(c=>c.alive&&c.id!==me.id&&!partners.has(c.id)); body+=`<section class="card"><h2>😈 襲撃する人物</h2><div class="field"><select id="attackTarget"><option value="">選択してください</option>${targets.map(c=>`<option value="${c.id}"${selectedAttr(c.id,attackDraft)}>${esc(c.name)}</option>`).join('')}</select><div class="field-hint">選択中の候補は自動更新が入っても保持されます。</div></div><button class="danger big full" id="attackBtn">襲撃先を決定</button></section>`; }
-    } else body+=`<section class="card center"><h2>夜の時間</h2><p>フレネミーが襲撃先を選んでいます。</p></section>`;
+      if(state.attacked) return appScreen(state,{kicker:'NIGHT ACTION',title:'襲撃先を選択済み',subtitle:'仲間の選択を待っています。',tone:'ready',body:waitCard('選択済み','襲撃先が一致すると成立します。','🌙')});
+      const partners=new Set((state.frenemyPartners||[]).map(x=>x.id));
+      const targets=state.roster.filter(c=>c.alive&&c.id!==me.id&&!partners.has(c.id));
+      body=actionPanel(`<label class="app-select-label">襲撃する人物<select id="attackTarget"><option value="">選択してください</option>${selectOptions(targets,attackDraft)}</select></label><button class="danger big full" id="attackBtn">襲撃先を決定</button>`);
+      return appScreen(state,{kicker:'NIGHT ACTION',title:'夜の行動',subtitle:'襲撃先を選んでください。',tone:'secret',body});
+    }
+    return appScreen(state,{kicker:'NIGHT',title:'夜になりました',subtitle:'フレネミーが行動しています。',tone:'wait',body:waitCard('夜の時間','結果までお待ちください。','🌙')});
   }
   if(state.phase==='suspectVote'){
-    body+=`${sceneCard('🌅','夜が明けました',state.latestAttack?.name?`${state.latestAttack.name} が襲撃されました。`:'襲撃結果を確認してください。')}`;
-    if(dead) body+=`<section class="card center"><h2>フレネミー投票</h2><p>脱落しているため投票できません。</p></section>`;
-    else if(state.votedSuspect) body+=`<section class="card center"><div class="metric good">投票完了</div><p>結果をお待ちください。</p></section>`;
-    else body+=`<section class="card"><h2>一番怪しい人物は？</h2><p>今回の議論で、ランキングを意図的に操作していたと思う人物を選んでください。</p><div class="field"><select id="suspectTarget"><option value="">選択してください</option>${state.roster.filter(c=>c.alive&&c.id!==me.id).map(c=>`<option value="${c.id}"${selectedAttr(c.id,suspectDraft)}>${esc(c.name)}</option>`).join('')}</select><div class="field-hint">選択中の候補は自動更新が入っても保持されます。</div></div><button class="big full" id="suspectBtn">フレネミー投票</button></section>`;
+    const dawnText=state.latestAttack?.name?`${state.latestAttack.name} が襲撃されました。`:'襲撃結果を確認してください。';
+    if(dead) return appScreen(state,{kicker:'FRENEMY VOTE',title:'フレネミー投票',subtitle:'脱落中のため投票できません。',tone:'wait',body:waitCard('投票待機',dawnText,'🌅')});
+    if(state.votedSuspect) return appScreen(state,{kicker:'VOTED',title:'投票完了',subtitle:'結果をお待ちください。',tone:'ready',body:waitCard('送信しました',dawnText,'✓')});
+    const targets=alivePlayers(state).filter(c=>c.id!==me.id);
+    body=actionPanel(`<div class="app-info-line"><span>夜明け</span><b>${esc(dawnText)}</b></div><label class="app-select-label">怪しい人物<select id="suspectTarget"><option value="">選択してください</option>${selectOptions(targets,suspectDraft)}</select></label><button class="big full" id="suspectBtn">投票する</button>`);
+    return appScreen(state,{kicker:'FRENEMY VOTE',title:'怪しい人物を選ぶ',subtitle:'ランキングを操作していたと思う人物に投票してください。',tone:'action',body});
   }
-  if(state.phase==='roundEnd') body+=`${sceneCard('📣','ラウンド終了',state.latestElimination?.name?`${state.latestElimination.name} が追放されました。`:'次のラウンドへ進みます。')}<section class="card center"><h2>ラウンド終了</h2><p>次のテーマまでお待ちください。</p></section>`;
-  return `<div class="grid"><div class="card two-third">${top}</div><div class="card third player-summary"><div class="kicker">YOU</div><h2>${esc(me.name)}</h2><div class="pill">${roleIcon(me.role)} ${esc(me.roleLabel)}</div></div><div style="grid-column:span 12">${phaseProgressHtml(state,true)}</div><div style="grid-column:span 12">${body}</div></div>`;
+  if(state.phase==='roundEnd'){
+    const text=state.latestElimination?.name?`${state.latestElimination.name} が追放されました。`:'次のラウンドへ進みます。';
+    return appScreen(state,{kicker:'ROUND END',title:'ラウンド終了',subtitle:text,tone:'wait',body:waitCard('次のラウンドへ',text,'📣')});
+  }
+  return appScreen(state,{title:'待機中',subtitle:'進行をお待ちください。',tone:'wait',body:waitCard('待機中','','…')});
 }
 function sceneCard(icon,title,text){return `<section class="scene-card"><div class="scene-icon">${icon}</div><div><div class="kicker">SCENE</div><h2>${esc(title)}</h2><p>${esc(text||'')}</p></div></section>`;}
 function voteResultTable(rr){
   const rows=(rr.voteRows||[]).filter(r=>r.count>0);
   if(!rows.length)return `<div class="empty">投票結果がありません</div>`;
   const max=Math.max(...rows.map(r=>r.count));
-  return `<div class="vote-table">${rows.map((r,i)=>`<div class="vote-row ${r.count===max?'top':''}"><span>${i+1}位 ${esc(r.name)}</span><b>${r.count}票</b></div>`).join('')}</div>`;
+  return `<div class="vote-table app-vote-table">${rows.map((r,i)=>`<div class="vote-row ${r.count===max?'top':''}"><span>${i+1}位 ${esc(r.name)}</span><b>${r.count}票</b></div>`).join('')}</div>`;
 }
 function playerSurveyHtml(state){
-  const othersNote = '同じ人を重複して選ぶことはできません。自分自身を選んでもOKです。';
-  return `${state.themes.map(t=>`<section class="card player-survey-theme" data-theme="${t.id}"><h2>${esc(t.title)}</h2><p class="muted">このテーマでTOP3だと思う出演者を選んでください。</p>${[1,2,3].map(n=>`<label>${n}位<select data-rank="${n}"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>`).join('')}</section>`).join('')}<section class="card"><p class="muted">${othersNote}</p><button class="big full" id="playerSurveyBtn">アンケートを送信して待機</button></section>`;
+  return `<div class="app-survey-list">${state.themes.map(t=>`<section class="card player-survey-theme app-survey-card" data-theme="${t.id}"><div class="app-overline">QUESTION</div><h2>${esc(t.title)}</h2>${[1,2,3].map(n=>`<label class="app-select-label">${n}位<select data-rank="${n}"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>`).join('')}</section>`).join('')}</div><section class="card app-action-panel"><p class="muted">各テーマで1〜3位を重複なしで選んでください。</p><button class="big full" id="playerSurveyBtn">送信して待機</button></section>`;
 }
