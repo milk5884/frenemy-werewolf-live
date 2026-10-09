@@ -37,6 +37,20 @@ function collectPlayerSurveyVotes(){
   }
   return votes;
 }
+async function handlePlayerActionError(e){
+  if(String(e.message||'').includes('参加認証に失敗しました')){
+    localStorage.removeItem(playerStorageKey());
+    lastHostSig='';
+    notify('参加情報を更新しています');
+    await wait(250);
+    return renderJoin();
+  }
+  notify(e.message);
+}
+async function refreshPlayer(token){
+  lastHostSig='';
+  await startPlayer(token);
+}
 function bindPlayer(state,token){
   const survey=document.getElementById('playerSurveyBtn');
   if(survey) survey.onclick=async()=>{
@@ -44,23 +58,23 @@ function bindPlayer(state,token){
     for(const [themeId,arr] of Object.entries(votes)){
       if(arr.length!==3||arr.some(x=>!x)||new Set(arr).size!==3)return notify('各テーマの1〜3位を重複なしで選んでください');
     }
-    try{await api(`/api/rooms/${roomCode}/player/survey?token=${token}`,{method:'POST',body:JSON.stringify({votes})});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}
+    try{await api(`/api/rooms/${roomCode}/player/survey?token=${token}`,{method:'POST',body:JSON.stringify({votes})});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}
   };
   const reveal=document.getElementById('revealRole');
-  if(reveal) reveal.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/role-seen?token=${token}`,{method:'POST',body:'{}'});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(reveal) reveal.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/role-seen?token=${token}`,{method:'POST',body:'{}'});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   bindSelectDraft(state,'seerTarget','seer');
   bindSelectDraft(state,'finalTarget','final');
   bindSelectDraft(state,'attackTarget','attack');
   bindSelectDraft(state,'suspectTarget','suspect');
   const seer=document.getElementById('seerBtn');
-  if(seer) seer.onclick=async()=>{const v=document.getElementById('seerTarget').value;if(!v)return notify('占う人物を選んでください');try{await api(`/api/rooms/${roomCode}/player/seer?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'seer');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(seer) seer.onclick=async()=>{const v=document.getElementById('seerTarget').value;if(!v)return notify('占う人物を選んでください');try{await api(`/api/rooms/${roomCode}/player/seer?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'seer');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const skip=document.getElementById('discussionSkipBtn');
-  if(skip) skip.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/discussion-skip?token=${token}`,{method:'POST',body:'{}'});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(skip) skip.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/discussion-skip?token=${token}`,{method:'POST',body:'{}'});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const final=document.getElementById('finalVoteBtn');
-  if(final) final.onclick=async()=>{const v=document.getElementById('finalTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/final-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'final');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(final) final.onclick=async()=>{const v=document.getElementById('finalTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/final-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'final');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const attack=document.getElementById('attackBtn');
-  if(attack) attack.onclick=async()=>{const v=document.getElementById('attackTarget').value;if(!v)return notify('襲撃先を選んでください');try{await api(`/api/rooms/${roomCode}/player/attack?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'attack');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(attack) attack.onclick=async()=>{const v=document.getElementById('attackTarget').value;if(!v)return notify('襲撃先を選んでください');try{await api(`/api/rooms/${roomCode}/player/attack?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'attack');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const suspect=document.getElementById('suspectBtn');
-  if(suspect) suspect.onclick=async()=>{const v=document.getElementById('suspectTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/suspect-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'suspect');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  if(suspect) suspect.onclick=async()=>{const v=document.getElementById('suspectTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/suspect-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'suspect');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
 }
 setInterval(()=>document.querySelectorAll('[data-timer-end]').forEach(n=>{const end=Number(n.dataset.timerEnd||0);if(end)n.textContent=fmtTime((end-Date.now())/1000);}),500);
