@@ -3,7 +3,7 @@ async function startPlayer(playerToken){
     try{
       const state=await api(`/api/rooms/${roomCode}/player?token=${playerToken}`);
       hideConnectionBanner();
-      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
+      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,skip:state.discussionSkipCount,skipped:state.discussionSkipped,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(playerPhaseHtml(state),`<div class="room-code">${esc(roomCode)}</div>`);
@@ -42,6 +42,8 @@ function bindPlayer(state,token){
   bindSelectDraft(state,'suspectTarget','suspect');
   const seer=document.getElementById('seerBtn');
   if(seer) seer.onclick=async()=>{const v=document.getElementById('seerTarget').value;if(!v)return notify('占う人物を選んでください');try{await api(`/api/rooms/${roomCode}/player/seer?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'seer');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
+  const skip=document.getElementById('discussionSkipBtn');
+  if(skip) skip.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/discussion-skip?token=${token}`,{method:'POST',body:'{}'});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
   const final=document.getElementById('finalVoteBtn');
   if(final) final.onclick=async()=>{const v=document.getElementById('finalTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/final-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'final');lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
   const attack=document.getElementById('attackBtn');
