@@ -1,4 +1,13 @@
 async function startPlayer(playerToken){
+  async function recoverAuthFailure(message){
+    clearInterval(pollHandle);
+    pollHandle=null;
+    localStorage.removeItem(playerStorageKey());
+    lastHostSig='';
+    notify('参加情報を更新しています');
+    await wait(250);
+    return renderJoin();
+  }
   async function tick(){
     try{
       const state=await api(`/api/rooms/${roomCode}/player?token=${playerToken}`);
@@ -10,7 +19,10 @@ async function startPlayer(playerToken){
         bindPlayer(state,playerToken);
         maybeShowSceneOverlay(state);
       }
-    }catch(e){showConnectionBanner(e.message);}
+    }catch(e){
+      if(String(e.message||'').includes('参加認証に失敗しました'))return recoverAuthFailure(e.message);
+      showConnectionBanner(e.message);
+    }
   }
   await tick(); clearInterval(pollHandle); pollHandle=setInterval(tick,2200);
 }
