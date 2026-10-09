@@ -3,11 +3,12 @@ async function startPlayer(playerToken){
     try{
       const state=await api(`/api/rooms/${roomCode}/player?token=${playerToken}`);
       hideConnectionBanner();
-      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount});
+      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(playerPhaseHtml(state),`<div class="room-code">${esc(roomCode)}</div>`);
         bindPlayer(state,playerToken);
+        maybeShowSceneOverlay(state);
       }
     }catch(e){showConnectionBanner(e.message);}
   }
