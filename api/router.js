@@ -43,7 +43,18 @@ export default async function handler(req,res){
       if(!result)return send(res,404,{error:'部屋が見つかりません'}); if(result.value?.json)return send(res,200,result.value.json);return send(res,200,hostView(result.room));
     }
     if(parts[3]==='join'&&req.method==='POST'){
-      const b=await body(req); const result=await updateRoom(code,r=>{const cast=byCast(r,b.castId);if(!cast)throw new Error('出演者が見つかりません');if(r.joins[cast.id])throw Object.assign(new Error('この出演者はすでに参加済みです'),{status:409});const j={castId:cast.id,token:token(),joinedAt:Date.now(),roleSeen:false};r.joins[cast.id]=j;return{json:{playerToken:j.token,castId:cast.id,name:cast.name}};});return send(res,200,result.value.json);
+      const b=await body(req);
+      const result=await updateRoom(code,r=>{
+        const cast=byCast(r,b.castId);
+        if(!cast)throw new Error('出演者が見つかりません');
+        let j=r.joins[cast.id];
+        if(!j){
+          j={castId:cast.id,token:token(),joinedAt:Date.now(),roleSeen:false};
+          r.joins[cast.id]=j;
+        }
+        return{json:{playerToken:j.token,castId:cast.id,name:cast.name,alreadyJoined:!!j.joinedAt}};
+      });
+      return send(res,200,result.value.json);
     }
     if(parts[3]==='player'){
       const ptoken=url.searchParams.get('token'), join=joinedByToken(room,ptoken);if(!join)return send(res,403,{error:'参加認証に失敗しました'});if(parts.length===4&&req.method==='GET')return send(res,200,playerView(room,join));
@@ -59,7 +70,19 @@ export default async function handler(req,res){
     if(parts[3]==='survey'){
       if(url.searchParams.get('key')!==room.surveyKey)return send(res,403,{error:'アンケートURLが無効です'});
       if(req.method==='GET')return send(res,200,{code:room.code,title:room.title,roster:room.roster.map(c=>({id:c.id,name:c.name})),themes:room.themes.map(t=>({id:t.id,title:t.title})),closed:room.surveyFinalized,count:Object.keys(room.surveySubmissions).length});
-      if(req.method==='POST'){const b=await body(req);const result=await updateRoom(code,r=>{if(url.searchParams.get('key')!==r.surveyKey)throw Object.assign(new Error('アンケートURLが無効です'),{status:403});if(r.surveyFinalized)throw new Error('このアンケートは締め切られています');if(!b.deviceId)throw new Error('端末IDがありません');if(r.surveySubmissions[b.deviceId])throw Object.assign(new Error('この端末からは回答済みです'),{status:409});for(const theme of r.themes){const v=b.votes?.[theme.id];if(!Array.isArray(v)||v.length!==3||new Set(v).size!==3||v.some(cid=>!byCast(r,cid)))throw new Error(`「${theme.title}」のTOP3を重複なしで選んでください`);}r.surveySubmissions[b.deviceId]={nickname:String(b.nickname||'').slice(0,40),votes:b.votes,at:Date.now()};return{json:{ok:true,count:Object.keys(r.surveySubmissions).length}};});return send(res,200,result.value.json);}
+      if(req.method==='POST'){
+        const b=await body(req);
+        const result=await updateRoom(code,r=>{
+          if(url.searchParams.get('key')!==r.surveyKey)throw Object.assign(new Error('アンケートURLが無効です'),{status:403});
+          if(r.surveyFinalized)throw new Error('このアンケートは締め切られています');
+          if(!b.deviceId)throw new Error('端末IDがありません');
+          if(r.surveySubmissions[b.deviceId])return{json:{ok:true,count:Object.keys(r.surveySubmissions).length,alreadySubmitted:true}};
+          for(const theme of r.themes){const v=b.votes?.[theme.id];if(!Array.isArray(v)||v.length!==3||new Set(v).size!==3||v.some(cid=>!byCast(r,cid)))throw new Error(`「${theme.title}」のTOP3を重複なしで選んでください`);}
+          r.surveySubmissions[b.deviceId]={nickname:String(b.nickname||'').slice(0,40),votes:b.votes,at:Date.now()};
+          return{json:{ok:true,count:Object.keys(r.surveySubmissions).length}};
+        });
+        return send(res,200,result.value.json);
+      }
     }
     return send(res,404,{error:'APIが見つかりません'});
   }catch(e){console.error(e);return send(res,e.status||400,{error:e.message||'サーバーエラー',...(e.extra||{})});}
