@@ -33,7 +33,9 @@ function playerPhaseHtml(state){
   }
   if(state.phase==='discussion'){
     const left=state.timerEndsAt?Math.max(0,(state.timerEndsAt-Date.now())/1000):0;
-    body=`<section class="card center"><div class="kicker">DISCUSSION</div><div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(left)}</div><p>誰が本心で話していて、誰がランキングを操作しているのか。</p>${me.role==='frenemy'&&state.frenemyTarget?`<div class="secret"><div class="kicker">あなたのターゲット</div><h2>${esc(state.frenemyTarget)}</h2><p class="muted">脱落者を除いた現在1位です。</p></div>`:''}${me.role==='seer'&&state.seerCheck?`<div class="secret"><div class="kicker">あなたの占い結果</div><h3>${esc(state.seerCheck.targetName)}：事前 ${state.seerCheck.rank}位</h3></div>`:''}</section>`;
+    const skipText=`議論スキップ ${state.discussionSkipCount||0} / ${state.roster.filter(c=>c.alive).length}`;
+    const skipHtml=dead?`<div class="pill">脱落済みのためスキップ投票できません</div>`:state.discussionSkipped?`<button class="secondary full" disabled>議論スキップ送信済み</button>`:`<button class="secondary full" id="discussionSkipBtn">議論をスキップ</button>`;
+    body=`<section class="card center"><div class="kicker">DISCUSSION</div><div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(left)}</div><p>誰が本心で話していて、誰がランキングを操作しているのか。</p><div class="skip-box"><div class="kicker">AUTO SKIP</div><p class="muted">オート進行ON時は、生存者全員が押すと人気順位投票へ進みます。</p><div class="metric">${esc(skipText)}</div>${skipHtml}</div>${me.role==='frenemy'&&state.frenemyTarget?`<div class="secret"><div class="kicker">あなたのターゲット</div><h2>${esc(state.frenemyTarget)}</h2><p class="muted">脱落者を除いた現在1位です。</p></div>`:''}${me.role==='seer'&&state.seerCheck?`<div class="secret"><div class="kicker">あなたの占い結果</div><h3>${esc(state.seerCheck.targetName)}：事前 ${state.seerCheck.rank}位</h3></div>`:''}</section>`;
   }
   if(state.phase==='finalVote'){
     if(dead) body=`<section class="card center"><h2>ランキング投票</h2><p>脱落しているため投票権はありません。</p></section>`;
