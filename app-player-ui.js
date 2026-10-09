@@ -1,6 +1,11 @@
 function playerPhaseHtml(state){
   const me=state.player; const theme=state.theme;
-  if(state.phase==='lobby') return `<section class="card center"><div class="metric">参加完了</div><p>ホストがゲームを開始するまでこの画面のままお待ちください。</p></section>`;
+  if(state.phase==='lobby'){
+    if(!state.surveySubmitted){
+      return `<section class="hero compact"><div class="eyebrow">PLAYER SURVEY</div><h1>${esc(me.name)}さんの事前アンケート</h1><p>ゲーム開始前に、各テーマでTOP3を選んでください。この集計結果がフレネミーのターゲットになります。</p></section>${playerSurveyHtml(state)}`;
+    }
+    return `<section class="card center"><div class="metric good">参加・アンケート完了</div><p>ホストがアンケート結果を確定し、ゲームを開始するまでこの画面のままお待ちください。</p><p class="muted">出演者アンケート ${state.playerSurveyCount||0} / ${state.roster.length}</p></section>`;
+  }
   if(state.phase==='roleReveal'){
     if(!me.roleSeen) return `<section class="card"><div class="role-card"><span class="role-icon large locked-card"><span>?</span></span><div class="kicker">SECRET ROLE</div><div class="role-name locked">フレネミー</div><p>周りから画面が見えないことを確認してください。</p><button class="big" id="revealRole">役職を見る</button></div></section>`;
     return `<section class="card">${roleCard(state)}<div class="center"><p>確認できたら、そのままお待ちください。</p></div></section>`;
@@ -17,7 +22,7 @@ function playerPhaseHtml(state){
   let body='';
   if(state.phase==='theme') body=`<section class="card center"><h2>テーマを確認</h2><p>このあとフレネミー情報、占いの順に進みます。</p></section>`;
   if(state.phase==='frenemyInfo'){
-    if(me.role==='frenemy'&&me.alive) body=`<section class="secret center"><div class="kicker">FRENEMY ONLY</div><h2>視聴者ランキング1位</h2><div class="theme-title accent">${esc(state.frenemyTarget||'—')}</div><p>この人物を、最終投票で1位から落としてください。個別ミッションはありません。</p></section>`;
+    if(me.role==='frenemy'&&me.alive) body=`<section class="secret center"><div class="kicker">FRENEMY ONLY</div><h2>出演者アンケート1位</h2><div class="theme-title accent">${esc(state.frenemyTarget||'—')}</div><p>この人物を、最終投票で1位から落としてください。個別ミッションはありません。</p></section>`;
     else body=`<section class="card center"><h2>秘密情報の確認中</h2><p>あなたに新しい情報はありません。</p></section>`;
   }
   if(state.phase==='seer'){
@@ -37,7 +42,7 @@ function playerPhaseHtml(state){
   }
   if(['result','attack','suspectVote','roundEnd'].includes(state.phase) && state.roundResult){
     const rr=state.roundResult; const success=rr.success;
-    body=`<section class="card center"><div class="kicker">ROUND RESULT</div><h2>視聴者事前1位</h2><div class="theme-title">${esc(rr.officialTopName)}</div><p>最終投票1位：${rr.winnerNames.map(esc).join(' / ')||'—'}</p><div class="result-win ${success?'bad':'good'}">${success?'😈 フレネミー成功':'🛡️ フレネミー失敗'}</div></section>`;
+    body=`<section class="card center"><div class="kicker">ROUND RESULT</div><h2>出演者アンケート事前1位</h2><div class="theme-title">${esc(rr.officialTopName)}</div><p>最終投票1位：${rr.winnerNames.map(esc).join(' / ')||'—'}</p><div class="result-win ${success?'bad':'good'}">${success?'😈 フレネミー成功':'🛡️ フレネミー失敗'}</div></section>`;
   }
   if(state.phase==='attack'){
     if(me.role==='frenemy'&&me.alive){
@@ -53,4 +58,7 @@ function playerPhaseHtml(state){
   if(state.phase==='roundEnd') body+=`<section class="card center"><h2>ラウンド終了</h2><p>次のテーマまでお待ちください。</p></section>`;
   return `<div class="grid"><div class="card two-third">${top}</div><div class="card third player-summary"><div class="kicker">YOU</div><h2>${esc(me.name)}</h2><div class="pill">${roleIcon(me.role)} ${esc(me.roleLabel)}</div></div><div style="grid-column:span 12">${phaseProgressHtml(state,true)}</div><div style="grid-column:span 12">${body}</div></div>`;
 }
-
+function playerSurveyHtml(state){
+  const othersNote = '同じ人を重複して選ぶことはできません。自分自身を選んでもOKです。';
+  return `${state.themes.map(t=>`<section class="card player-survey-theme" data-theme="${t.id}"><h2>${esc(t.title)}</h2><p class="muted">このテーマでTOP3だと思う出演者を選んでください。</p>${[1,2,3].map(n=>`<label>${n}位<select data-rank="${n}"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>`).join('')}</section>`).join('')}<section class="card"><p class="muted">${othersNote}</p><button class="big full" id="playerSurveyBtn">アンケートを送信して待機</button></section>`;
+}
