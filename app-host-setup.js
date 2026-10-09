@@ -1,7 +1,15 @@
 function getHostToken(){ return qs.get('token') || localStorage.getItem(`fw_host_${roomCode}`) || ''; }
 function hostUrl(path){ return `/api/rooms/${roomCode}/host${path||''}?token=${encodeURIComponent(getHostToken())}`; }
 function makeDefaultRoster(){return ['Aさん','Bさん','Cさん','Dさん','Eさん','Fさん'].map((name,i)=>({id:`c_${Date.now()}_${i}`,name}));}
-function makeDefaultThemes(){return pickThemeBank({categories:['本性','友情','ネタ'],intensities:['SAFE','SPICY'],count:3}).map((title,i)=>({id:`t_${Date.now()}_${i}`,title}));}
+function recommendedThemeCount(playerCount){
+  const n=Number(playerCount||0);
+  if(n<=5)return 2;
+  if(n<=6)return 3;
+  if(n<=8)return 4;
+  if(n<=10)return 5;
+  return 6;
+}
+function makeDefaultThemes(){return pickThemeBank({categories:['本性','友情','ネタ'],intensities:['SAFE','SPICY'],count:recommendedThemeCount(6)}).map((title,i)=>({id:`t_${Date.now()}_${i}`,title}));}
 
 const THEME_CATEGORIES=['恋愛','本性','友情','裏切り','仕事','未来','日常','学校','ネタ'];
 const THEME_INTENSITIES=['SAFE','SPICY','CHAOS'];
@@ -134,10 +142,26 @@ function pickThemeBank({categories=THEME_CATEGORIES,intensities=THEME_INTENSITIE
   return picked.map(x=>x.text);
 }
 function themeChoiceKey(x){return `${x.cat}|${x.level}|${x.text}`;}
-function themeBankHtml(){
+function currentRosterCount(){
+  const inputs=[...document.querySelectorAll('#rosterEdit input')];
+  return inputs.filter(x=>x.value.trim()).length || inputs.length || 6;
+}
+function themeCountHintText(count,players=currentRosterCount()){
+  return `参加人数 ${players}人に合わせた推奨追加数は ${count}問です。手動変更もできます。`;
+}
+function updateThemePickRecommendation(force=false){
+  const input=document.getElementById('themePickCount');
+  const hint=document.getElementById('themePickHint');
+  if(!input)return;
+  const players=currentRosterCount();
+  const rec=recommendedThemeCount(players);
+  if(force || input.dataset.touched!=='1') input.value=rec;
+  if(hint) hint.textContent=themeCountHintText(input.value,players);
+}
+function themeBankHtml(recommendedCount=3){
   const cats=THEME_CATEGORIES.map(c=>`<label class="theme-chip"><input type="checkbox" class="themeCat" value="${esc(c)}" checked><span>${esc(c)}</span></label>`).join('');
   const levels=THEME_INTENSITIES.map(l=>`<label class="theme-chip intensity-${l.toLowerCase()}"><input type="checkbox" class="themeLevel" value="${esc(l)}" ${l==='CHAOS'?'':'checked'}><span>${esc(l)}</span></label>`).join('');
-  return `<section class="card setup-section setup-full theme-bank"><h2>テーマ候補から選ぶ</h2><p class="muted">カテゴリと刺激度で絞り、使いたいお題を選んでテーマに追加できます。同一ゲーム内では同じテーマを入れない想定です。</p><div class="theme-filter"><div><div class="kicker">カテゴリ</div><div class="theme-chip-row">${cats}</div></div><div><div class="kicker">刺激度</div><div class="theme-chip-row">${levels}</div></div></div><div class="theme-bank-actions"><label class="setup-field small-field">追加数<input id="themePickCount" type="number" min="1" max="12" value="3"></label><button class="secondary" id="refreshThemeChoices" type="button">候補を更新</button><button class="secondary" id="addRandomThemes" type="button">ランダム追加</button><button class="big" id="addCheckedThemes" type="button">選択した候補を追加</button></div><div id="themeChoiceList" class="theme-choice-list"></div></section>`;
+  return `<section class="card setup-section setup-full theme-bank"><h2>テーマ候補から選ぶ</h2><p class="muted">カテゴリと刺激度で絞り、使いたいお題を選んでテーマに追加できます。同一ゲーム内では同じテーマを入れない想定です。</p><div class="theme-filter"><div><div class="kicker">カテゴリ</div><div class="theme-chip-row">${cats}</div></div><div><div class="kicker">刺激度</div><div class="theme-chip-row">${levels}</div></div></div><div class="theme-bank-actions"><label class="setup-field small-field">追加数<input id="themePickCount" type="number" min="1" max="12" value="${Number(recommendedCount||3)}"><span id="themePickHint" class="field-hint">${esc(themeCountHintText(recommendedCount||3,6))}</span></label><button class="secondary" id="refreshThemeChoices" type="button">候補を更新</button><button class="secondary" id="addRandomThemes" type="button">ランダム追加</button><button class="big" id="addCheckedThemes" type="button">選択した候補を追加</button></div><div id="themeChoiceList" class="theme-choice-list"></div></section>`;
 }
 function selectedThemeFilters(){
   const categories=[...document.querySelectorAll('.themeCat:checked')].map(x=>x.value);
@@ -160,8 +184,9 @@ function appendTheme(title){
   return true;
 }
 function addRandomThemesFromBank(){
+  updateThemePickRecommendation(false);
   const {categories,intensities}=selectedThemeFilters();
-  const count=Math.max(1,Number(document.getElementById('themePickCount')?.value||3));
+  const count=Math.max(1,Number(document.getElementById('themePickCount')?.value||recommendedThemeCount(currentRosterCount())));
   const current=new Set([...document.querySelectorAll('#themeEdit input')].map(x=>x.value.trim()).filter(Boolean));
   const choices=shuffleClient(THEME_BANK.filter(x=>categories.includes(x.cat)&&intensities.includes(x.level)&&!current.has(x.text))).slice(0,count);
   let n=0; choices.forEach(x=>{if(appendTheme(x.text))n++;});
@@ -172,12 +197,14 @@ function bindThemeBank(){
   document.querySelectorAll('.themeCat,.themeLevel').forEach(x=>x.onchange=renderThemeChoices);
   const refresh=document.getElementById('refreshThemeChoices'); if(refresh)refresh.onclick=renderThemeChoices;
   const random=document.getElementById('addRandomThemes'); if(random)random.onclick=addRandomThemesFromBank;
+  const count=document.getElementById('themePickCount'); if(count)count.oninput=()=>{count.dataset.touched='1';updateThemePickRecommendation(false);};
   const checked=document.getElementById('addCheckedThemes'); if(checked)checked.onclick=()=>{
     const selected=[...document.querySelectorAll('#themeChoiceList input:checked')].map(x=>x.value);
     let n=0; selected.forEach(t=>{if(appendTheme(t))n++;});
     notify(`${n}件のテーマを追加しました`);
     renderThemeChoices();
   };
+  updateThemePickRecommendation(true);
   renderThemeChoices();
 }
 
@@ -185,19 +212,20 @@ function openSetupFrom(state){
   setupOpen=true;
   editingSetup=true;
   const roster = state.roster?.length ? state.roster.map(c=>({id:c.id,name:c.name})) : makeDefaultRoster();
-  const themes = state.themes?.length ? state.themes.map(t=>({id:t.id,title:t.title})) : makeDefaultThemes();
+  const themes = state.themes?.length ? state.themes.map(t=>({id:t.id,title:t.title})) : pickThemeBank({categories:['本性','友情','ネタ'],intensities:['SAFE','SPICY'],count:recommendedThemeCount(roster.length)}).map((title,i)=>({id:`t_${Date.now()}_${i}`,title}));
   const rc = state.roleCounts || {frenemy:2,seer:1,madman:1};
+  const suggestedThemeCount=recommendedThemeCount(roster.length);
   app.innerHTML=shell(`
     <section class="hero compact"><div class="eyebrow">ROOM ${esc(roomCode)}</div><h1>ゲーム設定</h1><p>出演者・役職数・事前アンケート用テーマを設定します。</p></section>
     <div class="grid setup-grid">
       <section class="card setup-section setup-wide"><h2>出演者</h2><p class="muted">5人以上必要です。ホストが出演者として入る場合も、ここに名前を入れてください。</p><div id="rosterEdit" class="setup-list">${roster.map((c,i)=>setupEditRow('出演者',c.id,c.name,`出演者 ${i+1}`)).join('')}</div><button class="secondary full" id="addRoster">＋ 出演者を追加</button></section>
       <section class="card setup-section setup-side"><h2>役職数</h2><p class="muted">合計が出演者数未満になるようにしてください。残りは市民になります。</p><div class="role-count-grid"><label class="role-count-card"><span>フレネミー</span><input id="rcF" type="number" min="1" value="${Number(rc.frenemy||1)}"></label><label class="role-count-card"><span>占い師</span><input id="rcS" type="number" min="0" value="${Number(rc.seer||0)}"></label><label class="role-count-card"><span>狂人</span><input id="rcM" type="number" min="0" value="${Number(rc.madman||0)}"></label></div><label class="setup-field">議論時間（秒）<input id="discussionSec" type="number" min="60" step="30" value="${Number(state.discussionSeconds||300)}"></label></section>
-      ${themeBankHtml()}
+      ${themeBankHtml(suggestedThemeCount)}
       <section class="card setup-section setup-full"><h2>使用するテーマ</h2><p class="muted">ここに並んだテーマが各ラウンドのお題になります。手入力で追加・編集もできます。</p><div id="themeEdit" class="setup-list theme-list">${themes.map((t,i)=>setupEditRow('テーマ',t.id,t.title,`テーマ ${i+1}`)).join('')}</div><button class="secondary full" id="addTheme">＋ 空のテーマを追加</button></section>
       <section class="card setup-actions"><button class="big full" id="saveSetup">設定を保存</button><button class="ghost full" id="cancelSetup">戻る</button></section>
     </div>`, `<div class="room-code">${esc(roomCode)}</div>`);
-  document.getElementById('addRoster').onclick=()=>{document.getElementById('rosterEdit').insertAdjacentHTML('beforeend',setupEditRow('出演者',`c_${Date.now()}`,'','出演者'));bindSetupDelete();};
-  document.getElementById('addTheme').onclick=()=>{appendTheme('');};
+  document.getElementById('addRoster').onclick=()=>{document.getElementById('rosterEdit').insertAdjacentHTML('beforeend',setupEditRow('出演者',`c_${Date.now()}`,'','出演者'));bindSetupDelete();updateThemePickRecommendation(false);};
+  document.getElementById('addTheme').onclick=()=>{document.getElementById('themeEdit').insertAdjacentHTML('beforeend',setupEditRow('テーマ',`t_${Date.now()}_${Math.random().toString(16).slice(2)}`,'','テーマ'));bindSetupDelete();renderThemeChoices();};
   document.getElementById('cancelSetup').onclick=()=>{setupOpen=false;editingSetup=false;lastHostSig='';startHost();};
   document.getElementById('saveSetup').onclick=async()=>{
     const roster=[...document.querySelectorAll('#rosterEdit input')].map((x,i)=>({id:x.dataset.id||`c_${i}`,name:x.value.trim()})).filter(x=>x.name);
@@ -212,4 +240,4 @@ function openSetupFrom(state){
 function setupEditRow(kind,id,value,placeholder){
   return `<div class="setup-edit-row"><label><span>${esc(kind)}</span><input value="${esc(value)}" data-id="${esc(id)}" placeholder="${esc(placeholder)}"></label><button class="ghost small del-row" type="button">削除</button></div>`;
 }
-function bindSetupDelete(){document.querySelectorAll('.del-row').forEach(b=>b.onclick=()=>{b.closest('.setup-edit-row,.edit-row').remove();renderThemeChoices();});}
+function bindSetupDelete(){document.querySelectorAll('.del-row').forEach(b=>b.onclick=()=>{b.closest('.setup-edit-row,.edit-row').remove();renderThemeChoices();updateThemePickRecommendation(false);});}
