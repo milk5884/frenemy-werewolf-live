@@ -1,0 +1,128 @@
+const app = document.getElementById('app');
+const toast = document.getElementById('toast');
+const qs = new URLSearchParams(location.search);
+const mode = qs.get('mode') || 'home';
+const roomCode = (qs.get('room') || '').toUpperCase();
+
+const phaseLabels = {
+  lobby:'準備', roleReveal:'役職確認', theme:'テーマ発表', frenemyInfo:'フレネミー情報',
+  seer:'占い', discussion:'議論', finalVote:'ランキング投票', result:'結果発表', attack:'襲撃',
+  suspectVote:'フレネミー投票', roundEnd:'ラウンド終了', gameOver:'ゲーム終了'
+};
+const roleMeta = {
+  citizen:{label:'市民',emoji:'🙂',symbol:'人',cls:'role-citizen',desc:'会話から、ランキングを意図的に動かしているフレネミーを見抜いてください。'},
+  frenemy:{label:'フレネミー',emoji:'😈',symbol:'狼',cls:'role-frenemy',desc:'毎ラウンド知らされる「視聴者1位」を、会話だけで1位から落としてください。'},
+  seer:{label:'占い師',emoji:'🔮',symbol:'占',cls:'role-seer',desc:'毎ラウンド、議論前に1人だけ指定し、その人の事前アンケート順位を知れます。'},
+  madman:{label:'狂人',emoji:'🤡',symbol:'狂',cls:'role-madman',desc:'フレネミー陣営です。ただしフレネミーも事前1位も知りません。会話から味方を推理してください。'}
+};
+
+let pollHandle = null;
+let shareBase = `${location.protocol}//${location.host}`;
+let lastHostSig = '';
+let setupOpen = false;
+let editingSetup = false;
+
+function esc(v=''){ return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fmtTime(sec){ sec=Math.max(0,Math.ceil(sec)); return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
+function notify(msg){ toast.textContent=msg; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),1800); }
+function wait(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
+async function api(url,opts={}){
+  const method=String(opts.method||'GET').toUpperCase();
+  const attempts = opts.retries ?? (method==='GET' ? 3 : 1);
+  let lastError;
+  for(let i=0;i<attempts;i++){
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), opts.timeout || 8500);
+    try{
+      const res=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts,signal:controller.signal});
+      let data={}; try{data=await res.json();}catch(_){ }
+      if(!res.ok) throw new Error(data.error||`HTTP ${res.status}`);
+      return data;
+    }catch(e){
+      lastError=e;
+      if(i<attempts-1) await wait(500*(i+1));
+    }finally{ clearTimeout(timeout); }
+  }
+  throw lastError || new Error('通信に失敗しました');
+}
+function brandLogo(){
+  return `<div class="brand-mark" aria-hidden="true"><span class="brand-mark-main">F</span><span class="brand-mark-cut">×</span></div>`;
+}
+function roleIcon(role,extra=''){
+  const r=roleMeta[role]||roleMeta.citizen;
+  return `<span class="role-icon ${r.cls} ${extra}" aria-hidden="true"><span>${esc(r.symbol||r.emoji||'?')}</span></span>`;
+}
+function phaseProgressHtml(state,compact=false){
+  const order=['roleReveal','theme','frenemyInfo','seer','discussion','finalVote','result','attack','suspectVote','roundEnd','gameOver'];
+  const active=Math.max(0,order.indexOf(state.phase));
+  const visible=compact ? order.filter(p=>p!=='attack'||state.roundResult?.success) : order;
+  return `<div class="phase-progress ${compact?'compact':''}">${visible.map(p=>{
+    const idx=order.indexOf(p); const cls=idx<active?'done':idx===active?'active':'todo';
+    return `<div class="phase-step ${cls}"><span></span><b>${esc(phaseLabels[p]||p)}</b></div>`;
+  }).join('')}</div>`;
+}
+function showConnectionBanner(msg='通信が不安定です。自動で再接続しています…'){
+  let b=document.getElementById('connectionBanner');
+  if(!b){b=document.createElement('div');b.id='connectionBanner';b.className='conn-banner';document.body.appendChild(b);}
+  b.innerHTML=`<strong>再接続中</strong><span>${esc(msg)}</span>`;
+}
+function hideConnectionBanner(){ const b=document.getElementById('connectionBanner'); if(b)b.remove(); }
+function shell(inner,extra=''){
+  return `<div class="shell"><div class="topbar"><div class="brand">${brandLogo()}<div>フレネミー人狼<small>FRENEMY WEREWOLF LIVE</small></div></div>${extra}</div>${inner}<div class="footer-note">フレネミー人狼 LIVE v2.1 / スマホ・PCからオンライン参加できます。</div></div>`;
+}
+function currentBaseUrl(){ return shareBase; }
+async function resolveShareBase(){
+  if(!['localhost','127.0.0.1'].includes(location.hostname)) return;
+  try{ const info=await api('/api/info'); if(info.lanUrls?.length) shareBase=info.lanUrls[0]; }catch(_){ }
+}
+function qrImage(url){ return `https://quickchart.io/qr?size=320&margin=1&text=${encodeURIComponent(url)}`; }
+async function copyText(t){ try{await navigator.clipboard.writeText(t);notify('URLをコピーしました');}catch(_){prompt('コピーしてください',t);} }
+function tally(votes={}){ const c={}; Object.values(votes).forEach(id=>{if(id)c[id]=(c[id]||0)+1}); return c; }
+function nameOf(state,id){ return state.roster?.find(x=>x.id===id)?.name || '—'; }
+function aliveCount(state){ return state.roster.filter(x=>x.alive).length; }
+function roleCountAlive(state,role){ return state.roster.filter(x=>x.alive&&x.role===role).length; }
+
+function renderHome(){
+  app.innerHTML=shell(`
+    <section class="hero"><div class="eyebrow">SOCIAL DEDUCTION × RANKING</div><h1>本当に<br>味方ですか？</h1><p>視聴者が事前に作ったランキング。その1位を、会話だけで引きずり下ろそうとする「フレネミー」が紛れています。</p></section>
+    <div class="grid">
+      <section class="card half"><div class="kicker">HOST</div><h2>新しいゲームを作る</h2><p>進行役用。部屋を作成して、出演者・テーマ・視聴者アンケートを設定します。</p><button class="big full" id="createRoom">部屋を作成</button></section>
+      <section class="card half"><div class="kicker">PLAYER</div><h2>出演者として参加</h2><div class="field"><label>6桁の部屋コード</label><input id="joinCode" maxlength="6" placeholder="ABC123" autocapitalize="characters"></div><button class="secondary big full" id="joinRoom">参加する</button></section>
+    </div>`);
+  document.getElementById('createRoom').onclick=async()=>{
+    try{ const d=await api('/api/rooms',{method:'POST',body:JSON.stringify({title:'フレネミー人狼'})}); localStorage.setItem(`fw_host_${d.code}`,d.hostToken); location.href=`/?mode=host&room=${d.code}&token=${d.hostToken}`; }catch(e){notify(e.message)}
+  };
+  document.getElementById('joinRoom').onclick=()=>{ const c=document.getElementById('joinCode').value.trim().toUpperCase(); if(c.length<4)return notify('部屋コードを入力してください'); location.href=`/?mode=join&room=${encodeURIComponent(c)}`; };
+}
+
+async function renderJoin(){
+  if(!roomCode) return renderHome();
+  const saved=localStorage.getItem(`fw_player_${roomCode}`);
+  if(saved){ return startPlayer(saved); }
+  try{
+    const state=await api(`/api/rooms/${roomCode}/public`);
+    const available=state.roster.filter(x=>!x.joined);
+    app.innerHTML=shell(`
+      <section class="hero"><div class="eyebrow">ROOM ${esc(roomCode)}</div><h1>${esc(state.title)}</h1><p>自分の名前を選んで参加してください。役職はゲーム開始後、自分の端末だけに表示されます。</p></section>
+      <section class="card"><h2>あなたは誰ですか？</h2>${available.length?`<div class="list">${available.map(c=>`<button class="secondary full joinCast" data-id="${c.id}">${esc(c.name)}</button>`).join('')}</div>`:`<div class="empty">参加できる出演者がありません。ホスト側の設定を確認してください。</div>`}</section>`, `<div class="room-code">${esc(roomCode)}</div>`);
+    document.querySelectorAll('.joinCast').forEach(b=>b.onclick=async()=>{
+      try{const d=await api(`/api/rooms/${roomCode}/join`,{method:'POST',body:JSON.stringify({castId:b.dataset.id})});localStorage.setItem(`fw_player_${roomCode}`,d.playerToken);startPlayer(d.playerToken);}catch(e){notify(e.message)}
+    });
+  }catch(e){ app.innerHTML=shell(`<section class="card"><h2>参加できません</h2><p>${esc(e.message)}</p><a class="btn secondary" href="/">トップへ</a></section>`); }
+}
+
+function roleCard(state){
+  const r=roleMeta[state.player.role]||roleMeta.citizen;
+  const partner = state.player.role==='frenemy' && state.frenemyPartners?.length ? `<div class="divider"></div><div class="kicker">仲間のフレネミー</div><h3>${state.frenemyPartners.map(x=>esc(x.name)).join(' / ')}</h3>` : '';
+  return `<div class="role-card">${roleIcon(state.player.role,'large')}<div class="kicker">YOUR ROLE</div><div class="role-name ${r.cls}">${r.label}</div><p>${r.desc}</p>${partner}</div>`;
+}
+
+function draftKey(state,kind){
+  const pid=state?.player?.id || 'player';
+  return `fw_draft_${roomCode}_${pid}_${kind}_${state?.roundIndex ?? 0}`;
+}
+function getDraft(state,kind){ try{return sessionStorage.getItem(draftKey(state,kind))||'';}catch(_){return '';} }
+function setDraft(state,kind,value){ try{value?sessionStorage.setItem(draftKey(state,kind),value):sessionStorage.removeItem(draftKey(state,kind));}catch(_){} }
+function clearDraft(state,kind){ setDraft(state,kind,''); }
+function selectedAttr(value,current){ return value&&value===current?' selected':''; }
+
