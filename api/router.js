@@ -7,6 +7,26 @@ async function body(req){if(req.body&&typeof req.body==='object')return req.body
 function authHost(room,url){return room&&url.searchParams.get('token')===room.hostToken;}
 function apiPathOf(url){const routed=url.pathname==='/api/router'?url.searchParams.get('__path'):'';return routed?`/api/${routed.replace(/^\/+|\/+$/g,'')}`:url.pathname;}
 function partsOf(url){return apiPathOf(url).split('/').filter(Boolean);}
+function makeDefaultVotes(room){
+  const ids=room.roster.map(c=>c.id);
+  const votes={};
+  for(const theme of room.themes){
+    votes[theme.id]=[ids[0],ids[1],ids[2]].filter(Boolean);
+  }
+  return votes;
+}
+function ensureTestReady(room){
+  if(room.started)throw new Error('ゲーム開始後はテスト準備できません');
+  if(room.roster.length<5)throw new Error('出演者は5人以上必要です');
+  if(room.themes.length<1)throw new Error('テーマを1つ以上設定してください');
+  for(const cast of room.roster){
+    if(!room.joins[cast.id])room.joins[cast.id]={castId:cast.id,token:token(),joinedAt:Date.now(),roleSeen:false,testAuto:true};
+  }
+  if(!Object.keys(room.surveySubmissions||{}).length){
+    room.surveySubmissions.test_auto={nickname:'テスト回答',votes:makeDefaultVotes(room),at:Date.now(),testAuto:true};
+  }
+  if(!room.surveyFinalized)finalizeSurvey(room);
+}
 
 export default async function handler(req,res){
   const url=new URL(req.url,`https://${req.headers.host||'localhost'}`), apiPath=apiPathOf(url), parts=partsOf(url);
@@ -31,6 +51,7 @@ export default async function handler(req,res){
           if(b.roleCounts)r.roleCounts={frenemy:Number(b.roleCounts.frenemy||0),seer:Number(b.roleCounts.seer||0),madman:Number(b.roleCounts.madman||0)};
           if(b.discussionSeconds)r.discussionSeconds=Math.max(60,Number(b.discussionSeconds));for(const cid of Object.keys(r.joins))if(!r.roster.some(c=>c.id===cid))delete r.joins[cid];r.surveySubmissions={};r.surveyFinalized=false;return {view:'host'};
         }
+        if(parts[4]==='test-ready'&&req.method==='POST'){ensureTestReady(r);return{view:'host'};}
         if(parts[4]==='finalize-survey'&&req.method==='POST'){if(!Object.keys(r.surveySubmissions).length)throw new Error('アンケート回答がまだありません');finalizeSurvey(r);return{view:'host'};}
         if(parts[4]==='start'&&req.method==='POST'){startGame(r);return{view:'host'};}
         if(parts[4]==='phase'&&req.method==='POST'){const b=await body(req),allowed=['roleReveal','theme','frenemyInfo','seer','discussion','finalVote','result','attack','suspectVote','roundEnd','gameOver'];if(!allowed.includes(b.phase))throw new Error('無効なフェーズ');setPhase(r,b.phase);return{view:'host'};}
