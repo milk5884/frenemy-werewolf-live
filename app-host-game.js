@@ -7,24 +7,25 @@ function hostDashboard(state){
   return `<div class="grid">
     <section class="hero compact"><div class="eyebrow">ROOM ${esc(state.code)}</div><h1>${esc(state.title)}</h1><p>${esc(phaseLabels[state.phase]||state.phase)} / ROUND ${state.roundIndex+1}</p></section>
     <section class="card third"><h2>参加URL</h2><img class="qr" src="${qrImage(joinUrl)}"><button class="secondary full" id="copyJoin">出演者URLをコピー</button></section>
-    <section class="card third"><h2>アンケート</h2><img class="qr" src="${qrImage(surveyUrl)}"><button class="secondary full" id="copySurvey">視聴者URLをコピー</button><div class="metric">${state.surveyCount||0} 件</div></section>
+    <section class="card third"><h2>出演者アンケート</h2><div class="metric">${state.playerSurveyCount||0} / ${state.roster.length}</div><p class="muted">出演者は参加後、自分の端末で事前アンケートに回答します。</p><button class="secondary full" id="copySurvey">外部アンケートURLをコピー</button></section>
     <section class="card third"><h2>進行</h2><div class="metric">${esc(phaseLabels[state.phase]||state.phase)}</div><p>生存 ${aliveCount(state)} / フレネミー ${roleCountAlive(state,'frenemy')}</p><button class="secondary full" id="openTestView">テストビューを開く</button><button class="ghost full" id="editSetup" ${state.started?'disabled':''}>設定を編集</button></section>
     <section style="grid-column:span 12">${phaseProgressHtml(state)}</section>
-    <section class="card half"><h2>出演者</h2><div class="list">${state.roster.map(c=>`<div class="row ${c.alive?'':'dead'}"><div>${c.role?roleIcon(c.role):'<span class="role-icon"><span>?</span></span>'} <b>${esc(c.name)}</b><small>${c.joined?'参加済み':'未参加'} ${c.roleSeen?' / 役職確認済み':''}</small></div><div>${c.alive?'生存':'脱落'}</div></div>`).join('')}</div></section>
+    <section class="card half"><h2>出演者</h2><div class="list">${state.roster.map(c=>`<div class="row ${c.alive?'':'dead'}"><div>${c.role?roleIcon(c.role):'<span class="role-icon"><span>?</span></span>'} <b>${esc(c.name)}</b><small>${c.joined?'参加済み':'未参加'} ${c.surveySubmitted?' / アンケート済み':' / アンケート未回答'} ${c.roleSeen?' / 役職確認済み':''}</small></div><div>${c.alive?'生存':'脱落'}</div></div>`).join('')}</div></section>
     <section class="card half">${hostPhasePanel(state,canStart,round,startInfo)}</section>
   </div>`;
 }
 function startRequirementInfo(state){
   const joined=state.roster.filter(c=>c.joined).length;
+  const answered=state.playerSurveyCount||0;
   const missing=[];
   if(state.roster.length<5)missing.push(`出演者が不足しています（${state.roster.length}/5人以上）`);
   if(joined<state.roster.length)missing.push(`未参加の出演者がいます（${joined}/${state.roster.length}人参加）`);
-  if(!state.surveyCount)missing.push('アンケート回答がまだありません');
+  if(answered<state.roster.length)missing.push(`出演者アンケート未回答があります（${answered}/${state.roster.length}人回答）`);
   if(!state.surveyFinalized)missing.push('アンケート結果が未確定です');
-  return {ok:!missing.length,joined,missing};
+  return {ok:!missing.length,joined,answered,missing};
 }
 function hostPhasePanel(state,canStart,round,startInfo=startRequirementInfo(state)){
-  if(state.phase==='lobby') return `<h2>ゲーム開始前</h2><p>出演者参加、アンケート回答、結果確定が完了したら開始できます。</p><button class="secondary full" id="finalizeSurvey" ${state.surveyCount?'':'disabled'}>アンケート結果を確定</button><button class="secondary full" id="testReady" ${state.started?'disabled':''}>テスト用：参加＋アンケート確定を一括完了</button><button class="big full" id="startGame" ${canStart?'':'disabled'}>ゲーム開始</button><div class="start-check ${canStart?'good':'bad'}"><b>${canStart?'開始できます':'開始できません'}</b>${canStart?'<span>条件を満たしています。</span>':startInfo.missing.map(x=>`<span>・${esc(x)}</span>`).join('')}</div><div class="small muted">本番条件：全員参加＋アンケート回答＋アンケート確定</div>`;
+  if(state.phase==='lobby') return `<h2>ゲーム開始前</h2><p>出演者が参加後にアンケートへ回答し、ホストが結果確定すると開始できます。</p><button class="secondary full" id="finalizeSurvey" ${(state.playerSurveyCount||0)>=state.roster.length&&state.roster.length?'':'disabled'}>アンケート結果を確定</button><button class="secondary full" id="testReady" ${state.started?'disabled':''}>テスト用：参加＋アンケート確定を一括完了</button><button class="big full" id="startGame" ${canStart?'':'disabled'}>ゲーム開始</button><div class="start-check ${canStart?'good':'bad'}"><b>${canStart?'開始できます':'開始できません'}</b>${canStart?'<span>条件を満たしています。</span>':startInfo.missing.map(x=>`<span>・${esc(x)}</span>`).join('')}</div><div class="small muted">本番条件：全員参加＋出演者全員のアンケート回答＋アンケート確定</div>`;
   if(state.phase==='roleReveal') return `<h2>役職確認</h2><p>各出演者が自分の端末で役職を確認しています。</p><button class="big full phaseBtn" data-phase="theme">テーマ発表へ</button>`;
   if(state.phase==='theme') return `<h2>テーマ</h2><div class="theme-title">${esc(round?.title||'')}</div><button class="big full phaseBtn" data-phase="frenemyInfo">フレネミー情報へ</button>`;
   if(state.phase==='frenemyInfo') return `<h2>フレネミー情報</h2><p>フレネミーだけが各端末でターゲットを確認します。</p><button class="big full phaseBtn" data-phase="seer">占いへ</button>`;
