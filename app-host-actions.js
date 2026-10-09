@@ -6,7 +6,7 @@ async function startHost(){
     try{
       const state=await api(hostUrl(''));
       hideConnectionBanner();
-      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,autoAdvance:state.autoAdvance,phaseChangedAt:state.phaseChangedAt,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started,latestAttack:state.latestAttack,latestElimination:state.latestElimination});
+      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,autoAdvance:state.autoAdvance,phaseChangedAt:state.phaseChangedAt,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,discussionSkipCount:state.discussionSkipCount,discussionSkips:state.discussionSkips,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started,latestAttack:state.latestAttack,latestElimination:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(hostDashboard(state),`<div class="room-code">${esc(state.code)}</div>`);
