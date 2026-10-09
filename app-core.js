@@ -133,17 +133,18 @@ async function joinCast(castId){
 }
 async function renderJoin(){
   if(!roomCode) return renderHome();
-  const saved=localStorage.getItem(playerStorageKey());
-  if(saved){ return startPlayer(saved); }
   try{
     const state=await api(`/api/rooms/${roomCode}/public`);
     if(fixedCastId){
       const cast=state.roster.find(x=>x.id===fixedCastId);
       if(!cast)throw new Error('固定された出演者が見つかりません');
+      localStorage.removeItem(playerStorageKey());
       app.innerHTML=shell(`<section class="card center"><div class="kicker">FIXED TEST DEVICE</div><h2>${esc(cast.name)} として参加中</h2><p>このテスト端末を出演者にひも付けています。</p></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
       const token=await joinCast(fixedCastId);
       return startPlayer(token);
     }
+    const saved=localStorage.getItem(playerStorageKey());
+    if(saved){ return startPlayer(saved); }
     const available=state.roster.filter(x=>!x.joined);
     app.innerHTML=shell(`
       <section class="hero"><div class="eyebrow">ROOM ${esc(roomCode)}${clientSlot?` / ${esc(clientSlot)}`:''}</div><h1>${esc(state.title)}</h1><p>自分の名前を選んで参加してください。役職はゲーム開始後、自分の端末だけに表示されます。</p></section>
