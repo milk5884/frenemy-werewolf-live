@@ -1,3 +1,5 @@
+let playerTickInFlight = false;
+
 async function startPlayer(playerToken){
   async function recoverAuthFailure(message){
     clearInterval(pollHandle);
@@ -9,22 +11,35 @@ async function startPlayer(playerToken){
     return renderJoin();
   }
   async function tick(){
+    if(playerTickInFlight)return;
+    playerTickInFlight=true;
     try{
       const state=await api(`/api/rooms/${roomCode}/player?token=${playerToken}`);
+      if(fixedCastId && state?.player?.id && state.player.id!==fixedCastId){
+        localStorage.removeItem(playerStorageKey());
+        throw new Error('固定テスト端末の参加者がずれています');
+      }
       hideConnectionBanner();
       const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,skip:state.discussionSkipCount,skipped:state.discussionSkipped,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
-        app.innerHTML=shell(playerPhaseHtml(state),`<div class="room-code">${esc(roomCode)}</div>`);
+        const debug=fixedCastId?`<div class="test-device-debug">${esc(clientSlot||'test')} / ${esc(state.player?.name||'unknown')}</div>`:'';
+        app.innerHTML=shell(debug+playerPhaseHtml(state),`<div class="room-code">${esc(roomCode)}</div>`);
         bindPlayer(state,playerToken);
         maybeShowSceneOverlay(state);
       }
     }catch(e){
-      if(String(e.message||'').includes('参加認証に失敗しました'))return recoverAuthFailure(e.message);
+      const msg=String(e.message||'');
+      if(msg.includes('参加認証に失敗しました')||msg.includes('固定テスト端末の参加者がずれています'))return recoverAuthFailure(e.message);
       showConnectionBanner(e.message);
+    }finally{
+      playerTickInFlight=false;
     }
   }
-  await tick(); clearInterval(pollHandle); pollHandle=setInterval(tick,2200);
+  clearInterval(pollHandle);
+  await tick();
+  clearInterval(pollHandle);
+  pollHandle=setInterval(tick,2200);
 }
 function bindSelectDraft(state,id,kind){
   const el=document.getElementById(id); if(!el)return;
@@ -38,7 +53,8 @@ function collectPlayerSurveyVotes(){
   return votes;
 }
 async function handlePlayerActionError(e){
-  if(String(e.message||'').includes('参加認証に失敗しました')){
+  const msg=String(e.message||'');
+  if(msg.includes('参加認証に失敗しました')||msg.includes('固定テスト端末の参加者がずれています')){
     localStorage.removeItem(playerStorageKey());
     lastHostSig='';
     notify('参加情報を更新しています');
@@ -51,6 +67,10 @@ async function refreshPlayer(token){
   lastHostSig='';
   await startPlayer(token);
 }
+async function postPlayerAction(url,body,token){
+  await api(url,{method:'POST',body});
+  await refreshPlayer(token);
+}
 function bindPlayer(state,token){
   const survey=document.getElementById('playerSurveyBtn');
   if(survey) survey.onclick=async()=>{
@@ -58,10 +78,10 @@ function bindPlayer(state,token){
     for(const [themeId,arr] of Object.entries(votes)){
       if(arr.length!==3||arr.some(x=>!x)||new Set(arr).size!==3)return notify('各テーマの1〜3位を重複なしで選んでください');
     }
-    try{await api(`/api/rooms/${roomCode}/player/survey?token=${token}`,{method:'POST',body:JSON.stringify({votes})});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}
+    try{await postPlayerAction(`/api/rooms/${roomCode}/player/survey?token=${token}`,JSON.stringify({votes}),token);}catch(e){await handlePlayerActionError(e)}
   };
   const reveal=document.getElementById('revealRole');
-  if(reveal) reveal.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/role-seen?token=${token}`,{method:'POST',body:'{}'});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
+  if(reveal) reveal.onclick=async()=>{try{await postPlayerAction(`/api/rooms/${roomCode}/player/role-seen?token=${token}`,'{}',token);}catch(e){await handlePlayerActionError(e)}};
   bindSelectDraft(state,'seerTarget','seer');
   bindSelectDraft(state,'finalTarget','final');
   bindSelectDraft(state,'attackTarget','attack');
@@ -69,7 +89,7 @@ function bindPlayer(state,token){
   const seer=document.getElementById('seerBtn');
   if(seer) seer.onclick=async()=>{const v=document.getElementById('seerTarget').value;if(!v)return notify('占う人物を選んでください');try{await api(`/api/rooms/${roomCode}/player/seer?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'seer');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const skip=document.getElementById('discussionSkipBtn');
-  if(skip) skip.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/discussion-skip?token=${token}`,{method:'POST',body:'{}'});await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
+  if(skip) skip.onclick=async()=>{try{await postPlayerAction(`/api/rooms/${roomCode}/player/discussion-skip?token=${token}`,'{}',token);}catch(e){await handlePlayerActionError(e)}};
   const final=document.getElementById('finalVoteBtn');
   if(final) final.onclick=async()=>{const v=document.getElementById('finalTarget').value;if(!v)return notify('投票先を選んでください');try{await api(`/api/rooms/${roomCode}/player/final-vote?token=${token}`,{method:'POST',body:JSON.stringify({targetId:v})});clearDraft(state,'final');await refreshPlayer(token);}catch(e){await handlePlayerActionError(e)}};
   const attack=document.getElementById('attackBtn');
