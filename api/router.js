@@ -109,7 +109,15 @@ export default async function handler(req,res){
           return{json:{ok:true,count:Object.keys(r.surveySubmissions).length,playerSurveyCount:playerSurveyCount(r)}};
         }
         if(parts[4]==='role-seen'&&req.method==='POST'){j.roleSeen=true;if(r.autoAdvance)autoAdvance(r);return{json:{ok:true}};}
-        if(parts[4]==='seer'&&req.method==='POST'){if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');if(r.seerChecks[r.roundIndex])throw new Error('このラウンドではすでに占っています');const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;if(rank<1)throw new Error('順位が見つかりません');r.seerChecks[r.roundIndex]={seerId:cast.id,targetId:b.targetId,rank};if(r.autoAdvance)autoAdvance(r);return{json:{targetName:byCast(r,b.targetId)?.name,rank}};}
+        if(parts[4]==='seer'&&req.method==='POST'){
+          if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');
+          if(r.seerChecks[r.roundIndex])throw new Error('このラウンドではすでに占っています');
+          const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;
+          if(rank<1)throw new Error('順位が見つかりません');
+          r.seerChecks[r.roundIndex]={seerId:cast.id,targetId:b.targetId,rank};
+          if(r.autoAdvance)setPhase(r,'discussion');
+          return{json:{targetName:byCast(r,b.targetId)?.name,rank,phase:r.phase}};
+        }
         if(parts[4]==='final-vote'&&req.method==='POST'){
           if(!cast.alive||r.phase!=='finalVote')throw new Error('現在は最終投票できません');
           const b=await body(req), target=byCast(r,b.targetId);
