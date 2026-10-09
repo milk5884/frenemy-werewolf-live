@@ -1,6 +1,7 @@
 function hostDashboard(state){
   const joinUrl=`${currentBaseUrl()}/?mode=join&room=${state.code}`;
-  const hostPlayerUrl=`${currentBaseUrl()}/?mode=join&room=${state.code}&slot=host-player`;
+  const hostCast=state.roster[0];
+  const hostPlayerUrl=hostCast?`${currentBaseUrl()}/?mode=join&room=${state.code}&slot=host-player&cast=${encodeURIComponent(hostCast.id)}`:`${currentBaseUrl()}/?mode=join&room=${state.code}&slot=host-player`;
   const surveyUrl=`${currentBaseUrl()}/?mode=survey&room=${state.code}&key=${state.surveyKey}`;
   const startInfo=startRequirementInfo(state);
   const canStart=startInfo.ok;
@@ -13,7 +14,7 @@ function hostDashboard(state){
     <section style="grid-column:span 12">${phaseProgressHtml(state)}</section>
     <section class="card half"><h2>出演者</h2><div class="list">${state.roster.map(c=>`<div class="row ${c.alive?'':'dead'}"><div>${c.role?roleIcon(c.role):'<span class="role-icon"><span>?</span></span>'} <b>${esc(c.name)}</b><small>${c.joined?'参加済み':'未参加'} ${c.surveySubmitted?' / アンケート済み':' / アンケート未回答'} ${c.roleSeen?' / 役職確認済み':''}</small></div><div>${c.alive?'生存':'脱落'}</div></div>`).join('')}</div></section>
     <section class="card half">${hostPhasePanel(state,canStart,round,startInfo)}</section>
-    <section class="card" style="grid-column:span 12"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2>ホストも出演者として参加</h2><p class="muted">この枠はホスト専用の出演者端末です。名前選択、アンケート、役職確認、投票までここで操作できます。</p></div><a class="button-link secondary" href="${esc(hostPlayerUrl)}" target="_blank" rel="noopener">別窓で開く</a></div><iframe src="${esc(hostPlayerUrl)}" title="ホスト出演者端末" style="width:100%;height:680px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:#09090d;margin-top:12px"></iframe></section>
+    <section class="card" style="grid-column:span 12"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2>ホストも出演者として参加</h2><p class="muted">この枠はホスト専用の出演者端末です。初期状態では ${esc(hostCast?.name||'先頭の出演者')} に固定しています。別の名前で入りたい場合は出演者URLを別窓で開いてください。</p></div><a class="button-link secondary" href="${esc(hostPlayerUrl)}" target="_blank" rel="noopener">別窓で開く</a></div><iframe src="${esc(hostPlayerUrl)}" title="ホスト出演者端末" style="width:100%;height:680px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:#09090d;margin-top:12px"></iframe></section>
   </div>`;
 }
 function startRequirementInfo(state){
