@@ -4,6 +4,7 @@ const qs = new URLSearchParams(location.search);
 const mode = qs.get('mode') || 'home';
 const roomCode = (qs.get('room') || '').toUpperCase();
 const clientSlot = (qs.get('slot') || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40);
+const fixedCastId = (qs.get('cast') || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80);
 const storageSuffix = clientSlot ? `_${clientSlot}` : '';
 
 const phaseLabels = {
@@ -100,18 +101,30 @@ function renderHome(){
   document.getElementById('joinRoom').onclick=()=>{ const c=document.getElementById('joinCode').value.trim().toUpperCase(); if(c.length<4)return notify('部屋コードを入力してください'); location.href=`/?mode=join&room=${encodeURIComponent(c)}`; };
 }
 
+async function joinCast(castId){
+  const d=await api(`/api/rooms/${roomCode}/join`,{method:'POST',body:JSON.stringify({castId})});
+  localStorage.setItem(playerStorageKey(),d.playerToken);
+  return d.playerToken;
+}
 async function renderJoin(){
   if(!roomCode) return renderHome();
   const saved=localStorage.getItem(playerStorageKey());
   if(saved){ return startPlayer(saved); }
   try{
     const state=await api(`/api/rooms/${roomCode}/public`);
+    if(fixedCastId){
+      const cast=state.roster.find(x=>x.id===fixedCastId);
+      if(!cast)throw new Error('固定された出演者が見つかりません');
+      app.innerHTML=shell(`<section class="card center"><div class="kicker">FIXED TEST DEVICE</div><h2>${esc(cast.name)} として参加中</h2><p>このテスト端末を出演者にひも付けています。</p></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
+      const token=await joinCast(fixedCastId);
+      return startPlayer(token);
+    }
     const available=state.roster.filter(x=>!x.joined);
     app.innerHTML=shell(`
       <section class="hero"><div class="eyebrow">ROOM ${esc(roomCode)}${clientSlot?` / ${esc(clientSlot)}`:''}</div><h1>${esc(state.title)}</h1><p>自分の名前を選んで参加してください。役職はゲーム開始後、自分の端末だけに表示されます。</p></section>
       <section class="card"><h2>あなたは誰ですか？</h2>${available.length?`<div class="list">${available.map(c=>`<button class="secondary full joinCast" data-id="${c.id}">${esc(c.name)}</button>`).join('')}</div>`:`<div class="empty">参加できる出演者がありません。ホスト側の設定を確認してください。</div>`}</section>`, `<div class="room-code">${esc(roomCode)}</div>`);
     document.querySelectorAll('.joinCast').forEach(b=>b.onclick=async()=>{
-      try{const d=await api(`/api/rooms/${roomCode}/join`,{method:'POST',body:JSON.stringify({castId:b.dataset.id})});localStorage.setItem(playerStorageKey(),d.playerToken);startPlayer(d.playerToken);}catch(e){notify(e.message)}
+      try{const token=await joinCast(b.dataset.id);startPlayer(token);}catch(e){notify(e.message)}
     });
   }catch(e){ app.innerHTML=shell(`<section class="card"><h2>参加できません</h2><p>${esc(e.message)}</p><a class="button-link secondary" href="/">トップへ</a></section>`); }
 }
