@@ -131,6 +131,16 @@ async function joinCast(castId){
   localStorage.setItem(playerStorageKey(),d.playerToken);
   return d.playerToken;
 }
+async function validSavedPlayerToken(expectedCastId){
+  const saved=localStorage.getItem(playerStorageKey());
+  if(!saved)return '';
+  try{
+    const state=await api(`/api/rooms/${roomCode}/player?token=${saved}`,{retries:1,timeout:6000});
+    if(!expectedCastId || state?.player?.id===expectedCastId)return saved;
+  }catch(_){ }
+  localStorage.removeItem(playerStorageKey());
+  return '';
+}
 async function renderJoin(){
   if(!roomCode) return renderHome();
   try{
@@ -138,12 +148,11 @@ async function renderJoin(){
     if(fixedCastId){
       const cast=state.roster.find(x=>x.id===fixedCastId);
       if(!cast)throw new Error('固定された出演者が見つかりません');
-      localStorage.removeItem(playerStorageKey());
       app.innerHTML=shell(`<section class="card center"><div class="kicker">FIXED TEST DEVICE</div><h2>${esc(cast.name)} として参加中</h2><p>このテスト端末を出演者にひも付けています。</p></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
-      const token=await joinCast(fixedCastId);
-      return startPlayer(token);
+      const saved=await validSavedPlayerToken(fixedCastId);
+      return startPlayer(saved || await joinCast(fixedCastId));
     }
-    const saved=localStorage.getItem(playerStorageKey());
+    const saved=await validSavedPlayerToken('');
     if(saved){ return startPlayer(saved); }
     const available=state.roster.filter(x=>!x.joined);
     app.innerHTML=shell(`
