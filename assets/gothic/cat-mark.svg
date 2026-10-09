@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="42%" r="58%"><stop offset="0" stop-color="#ff6bae"/><stop offset=".65" stop-color="#1b1028"/><stop offset="1" stop-color="#06050a"/></radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <circle cx="120" cy="120" r="102" fill="#110a1d" stroke="#ff3f9a" stroke-width="7" filter="url(#glow)"/>
+  <circle cx="120" cy="120" r="82" fill="url(#g)" opacity=".95"/>
+  <path d="M67 112 C69 75 88 55 98 38 L118 74 L142 38 C154 57 170 78 173 112 C177 159 149 184 120 184 C91 184 63 159 67 112Z" fill="#100915" stroke="#ff95cd" stroke-width="5"/>
+  <path d="M91 123 C101 114 113 114 119 124 C108 136 98 136 91 123Z" fill="#fff2ff"/>
+  <path d="M149 123 C139 114 127 114 121 124 C132 136 142 136 149 123Z" fill="#fff2ff"/>
+  <path d="M120 137 l8 8 l-8 8 l-8-8z" fill="#ff5ca4"/>
+  <path d="M120 150 C110 163 98 166 86 160 M120 150 C130 163 142 166 154 160" fill="none" stroke="#ff95cd" stroke-width="5" stroke-linecap="round"/>
+  <path d="M44 42 l10 20 l22 4 l-16 15 l4 22 l-20-10 l-20 10 l4-22 l-16-15 l22-4z" fill="#ff4fa2" opacity=".7"/>
+  <path d="M196 42 l10 20 l22 4 l-16 15 l4 22 l-20-10 l-20 10 l4-22 l-16-15 l22-4z" fill="#c983ff" opacity=".7"/>
+</svg>
