@@ -6,7 +6,7 @@ async function startHost(){
     try{
       const state=await api(hostUrl(''));
       hideConnectionBanner();
-      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,roster:state.roster,themes:state.themes,survey:state.surveyCount,surveyFinalized:state.surveyFinalized,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started});
+      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(hostDashboard(state),`<div class="room-code">${esc(state.code)}</div>`);
@@ -37,7 +37,7 @@ async function renderSurvey(){
     const state=await api(`/api/rooms/${roomCode}/survey?key=${encodeURIComponent(key)}`);
     const submitted=localStorage.getItem(surveyDoneKey(key));
     if(submitted){app.innerHTML=shell(`<section class="card center"><div class="metric good">回答済み</div><p>ご協力ありがとうございました。</p></section>`);return;}
-    app.innerHTML=shell(`<section class="hero compact"><div class="eyebrow">AUDIENCE SURVEY${clientSlot?` / ${esc(clientSlot)}`:''}</div><h1>${esc(state.title)}</h1><p>各テーマでTOP3を選んでください。同じ人は重複選択できません。</p></section><section class="card"><label>ニックネーム<input id="surveyName" placeholder="任意"></label></section>${state.themes.map(t=>`<section class="card survey-theme" data-theme="${t.id}"><h2>${esc(t.title)}</h2>${[1,2,3].map(n=>`<label>${n}位<select data-rank="${n}"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>`).join('')}</section>`).join('')}<section class="card"><button class="big full" id="submitSurvey">回答を送信</button></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
+    app.innerHTML=shell(`<section class="hero compact"><div class="eyebrow">EXTERNAL SURVEY${clientSlot?` / ${esc(clientSlot)}`:''}</div><h1>${esc(state.title)}</h1><p>外部・視聴者用の追加アンケートです。通常は出演者が各自の端末から回答します。</p></section><section class="card"><label>ニックネーム<input id="surveyName" placeholder="任意"></label></section>${state.themes.map(t=>`<section class="card survey-theme" data-theme="${t.id}"><h2>${esc(t.title)}</h2>${[1,2,3].map(n=>`<label>${n}位<select data-rank="${n}"><option value="">選択してください</option>${state.roster.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>`).join('')}</section>`).join('')}<section class="card"><button class="big full" id="submitSurvey">回答を送信</button></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
     document.getElementById('submitSurvey').onclick=async()=>{
       const votes={}; for(const sec of document.querySelectorAll('.survey-theme')) votes[sec.dataset.theme]=[...sec.querySelectorAll('select')].map(s=>s.value);
       try{await api(`/api/rooms/${roomCode}/survey?key=${encodeURIComponent(key)}`,{method:'POST',body:JSON.stringify({deviceId,nickname:document.getElementById('surveyName').value,votes})});localStorage.setItem(surveyDoneKey(key),'1');app.innerHTML=shell(`<section class="card center"><div class="metric good">送信完了</div><p>回答ありがとうございました。</p></section>`);}catch(e){notify(e.message)}
