@@ -3,7 +3,7 @@ async function startPlayer(playerToken){
     try{
       const state=await api(`/api/rooms/${roomCode}/player?token=${playerToken}`);
       hideConnectionBanner();
-      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck});
+      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(playerPhaseHtml(state),`<div class="room-code">${esc(roomCode)}</div>`);
@@ -17,7 +17,22 @@ function bindSelectDraft(state,id,kind){
   const el=document.getElementById(id); if(!el)return;
   el.onchange=()=>setDraft(state,kind,el.value);
 }
+function collectPlayerSurveyVotes(){
+  const votes={};
+  for(const sec of document.querySelectorAll('.player-survey-theme')){
+    votes[sec.dataset.theme]=[...sec.querySelectorAll('select')].map(s=>s.value);
+  }
+  return votes;
+}
 function bindPlayer(state,token){
+  const survey=document.getElementById('playerSurveyBtn');
+  if(survey) survey.onclick=async()=>{
+    const votes=collectPlayerSurveyVotes();
+    for(const [themeId,arr] of Object.entries(votes)){
+      if(arr.length!==3||arr.some(x=>!x)||new Set(arr).size!==3)return notify('各テーマの1〜3位を重複なしで選んでください');
+    }
+    try{await api(`/api/rooms/${roomCode}/player/survey?token=${token}`,{method:'POST',body:JSON.stringify({votes})});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}
+  };
   const reveal=document.getElementById('revealRole');
   if(reveal) reveal.onclick=async()=>{try{await api(`/api/rooms/${roomCode}/player/role-seen?token=${token}`,{method:'POST',body:'{}'});lastHostSig='';await startPlayer(token);}catch(e){notify(e.message)}};
   bindSelectDraft(state,'seerTarget','seer');
