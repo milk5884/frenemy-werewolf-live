@@ -97,7 +97,12 @@ export default async function handler(req,res){
         }
         if(parts[4]==='role-seen'&&req.method==='POST'){j.roleSeen=true;return{json:{ok:true}};}
         if(parts[4]==='seer'&&req.method==='POST'){if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');if(r.seerChecks[r.roundIndex])throw new Error('このラウンドではすでに占っています');const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;if(rank<1)throw new Error('順位が見つかりません');r.seerChecks[r.roundIndex]={seerId:cast.id,targetId:b.targetId,rank};return{json:{targetName:byCast(r,b.targetId)?.name,rank}};}
-        if(parts[4]==='final-vote'&&req.method==='POST'){if(!cast.alive||r.phase!=='finalVote')throw new Error('現在は最終投票できません');const b=await body(req);if(!byCast(r,b.targetId))throw new Error('無効な投票先です');r.finalVotes[cast.id]=b.targetId;return{json:{ok:true}};}
+        if(parts[4]==='final-vote'&&req.method==='POST'){
+          if(!cast.alive||r.phase!=='finalVote')throw new Error('現在は最終投票できません');
+          const b=await body(req), target=byCast(r,b.targetId);
+          if(!target||!target.alive)throw new Error('脱落している人には投票できません');
+          r.finalVotes[cast.id]=b.targetId;return{json:{ok:true}};
+        }
         if(parts[4]==='suspect-vote'&&req.method==='POST'){if(!cast.alive||r.phase!=='suspectVote')throw new Error('現在はフレネミー投票できません');const b=await body(req);if(b.targetId===cast.id||!byCast(r,b.targetId)?.alive)throw new Error('無効な投票先です');r.suspectVotes[cast.id]=b.targetId;return{json:{ok:true}};}
         if(parts[4]==='attack'&&req.method==='POST'){if(cast.role!=='frenemy'||!cast.alive||r.phase!=='attack')throw new Error('現在は襲撃できません');const b=await body(req),t=byCast(r,b.targetId);if(!t||!t.alive||t.role==='frenemy')throw new Error('無効な襲撃先です');r.attackVotes[cast.id]=b.targetId;return{json:{ok:true}};}
         throw Object.assign(new Error('APIが見つかりません'),{status:404});
