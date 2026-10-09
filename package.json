@@ -2,12 +2,12 @@
   "name": "frenemy-werewolf-live",
   "private": true,
   "type": "module",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "フレネミー人狼 LIVE - Vercel production multi-device app",
   "dependencies": {
     "@vercel/blob": "^2.0.0"
   },
   "scripts": {
-    "check": "node --check api/router.js && node --check lib/game.js && node --check lib/storage.js && node --check app-core.js && node --check app-player-ui.js && node --check app-player-actions.js && node --check app-host-setup.js && node --check app-host-game.js && node --check app-host-actions.js && node --check app-boot.js"
+    "check": "node --check api/router.js && node --check lib/game.js && node --check lib/storage.js && node --check app-core.js && node --check app-player-ui.js && node --check app-player-actions.js && node --check app-host-setup.js && node --check app-host-game.js && node --check app-host-actions.js && node --check app-test.js && node --check app-boot.js"
   }
 }
