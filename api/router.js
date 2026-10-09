@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 import { createRoomPersisted, loadRoom, updateRoom, storageMode } from '../lib/storage.js';
-import { ROLE_LABELS, token, id, createRoom, publicRoom, hostView, playerView, computeSurveyResults, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance } from '../lib/game.js';
+import { ROLE_LABELS, token, id, createRoom, publicRoom, hostView, playerView, computeSurveyResults, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks } from '../lib/game.js';
 
 function send(res,status,obj){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store, max-age=0');res.end(JSON.stringify(obj));}
 async function body(req){if(req.body&&typeof req.body==='object')return req.body;let d='';for await(const c of req){d+=c;if(d.length>2e6)throw new Error('リクエストが大きすぎます');}return d?JSON.parse(d):{};}
@@ -109,7 +109,20 @@ export default async function handler(req,res){
           return{json:{ok:true,count:Object.keys(r.surveySubmissions).length,playerSurveyCount:playerSurveyCount(r)}};
         }
         if(parts[4]==='role-seen'&&req.method==='POST'){j.roleSeen=true;if(r.autoAdvance)autoAdvance(r);return{json:{ok:true}};}
-        if(parts[4]==='seer'&&req.method==='POST'){if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');if(r.seerChecks[r.roundIndex])throw new Error('このラウンドではすでに占っています');const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;if(rank<1)throw new Error('順位が見つかりません');r.seerChecks[r.roundIndex]={seerId:cast.id,targetId:b.targetId,rank};if(r.autoAdvance)autoAdvance(r);return{json:{targetName:byCast(r,b.targetId)?.name,rank}};}
+        if(parts[4]==='seer'&&req.method==='POST'){
+          if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');
+          const checks=seerRoundChecks(r);
+          if(checks[cast.id])throw new Error('このラウンドではすでに占っています');
+          const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;
+          if(rank<1)throw new Error('順位が見つかりません');
+          if(!r.seerChecks)r.seerChecks={};
+          const legacy=r.seerChecks[r.roundIndex];
+          if(legacy?.seerId)r.seerChecks[r.roundIndex]={[legacy.seerId]:legacy};
+          if(!r.seerChecks[r.roundIndex])r.seerChecks[r.roundIndex]={};
+          r.seerChecks[r.roundIndex][cast.id]={seerId:cast.id,targetId:b.targetId,rank};
+          if(r.autoAdvance)autoAdvance(r);
+          return{json:{targetName:byCast(r,b.targetId)?.name,rank}};
+        }
         if(parts[4]==='discussion-skip'&&req.method==='POST'){
           if(!cast.alive||r.phase!=='discussion')throw new Error('現在は議論をスキップできません');
           if(!r.discussionSkips)r.discussionSkips={};
