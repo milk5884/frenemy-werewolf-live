@@ -3,6 +3,8 @@ const toast = document.getElementById('toast');
 const qs = new URLSearchParams(location.search);
 const mode = qs.get('mode') || 'home';
 const roomCode = (qs.get('room') || '').toUpperCase();
+const clientSlot = (qs.get('slot') || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40);
+const storageSuffix = clientSlot ? `_${clientSlot}` : '';
 
 const phaseLabels = {
   lobby:'準備', roleReveal:'役職確認', theme:'テーマ発表', frenemyInfo:'フレネミー情報',
@@ -68,7 +70,7 @@ function showConnectionBanner(msg='通信が不安定です。自動で再接続
 }
 function hideConnectionBanner(){ const b=document.getElementById('connectionBanner'); if(b)b.remove(); }
 function shell(inner,extra=''){
-  return `<div class="shell"><div class="topbar"><div class="brand">${brandLogo()}<div>フレネミー人狼<small>FRENEMY WEREWOLF LIVE</small></div></div>${extra}</div>${inner}<div class="footer-note">フレネミー人狼 LIVE v2.1 / スマホ・PCからオンライン参加できます。</div></div>`;
+  return `<div class="shell"><div class="topbar"><div class="brand">${brandLogo()}<div>フレネミー人狼<small>FRENEMY WEREWOLF LIVE</small></div></div>${extra}</div>${inner}<div class="footer-note">フレネミー人狼 LIVE v2.2 / スマホ・PCからオンライン参加できます。</div></div>`;
 }
 function currentBaseUrl(){ return shareBase; }
 async function resolveShareBase(){
@@ -81,6 +83,9 @@ function tally(votes={}){ const c={}; Object.values(votes).forEach(id=>{if(id)c[
 function nameOf(state,id){ return state.roster?.find(x=>x.id===id)?.name || '—'; }
 function aliveCount(state){ return state.roster.filter(x=>x.alive).length; }
 function roleCountAlive(state,role){ return state.roster.filter(x=>x.alive&&x.role===role).length; }
+function playerStorageKey(){ return `fw_player_${roomCode}${storageSuffix}`; }
+function surveyDeviceKey(){ return `fw_survey_device_${roomCode}${storageSuffix}`; }
+function surveyDoneKey(key){ return `fw_survey_done_${roomCode}_${key}${storageSuffix}`; }
 
 function renderHome(){
   app.innerHTML=shell(`
@@ -97,18 +102,18 @@ function renderHome(){
 
 async function renderJoin(){
   if(!roomCode) return renderHome();
-  const saved=localStorage.getItem(`fw_player_${roomCode}`);
+  const saved=localStorage.getItem(playerStorageKey());
   if(saved){ return startPlayer(saved); }
   try{
     const state=await api(`/api/rooms/${roomCode}/public`);
     const available=state.roster.filter(x=>!x.joined);
     app.innerHTML=shell(`
-      <section class="hero"><div class="eyebrow">ROOM ${esc(roomCode)}</div><h1>${esc(state.title)}</h1><p>自分の名前を選んで参加してください。役職はゲーム開始後、自分の端末だけに表示されます。</p></section>
+      <section class="hero"><div class="eyebrow">ROOM ${esc(roomCode)}${clientSlot?` / ${esc(clientSlot)}`:''}</div><h1>${esc(state.title)}</h1><p>自分の名前を選んで参加してください。役職はゲーム開始後、自分の端末だけに表示されます。</p></section>
       <section class="card"><h2>あなたは誰ですか？</h2>${available.length?`<div class="list">${available.map(c=>`<button class="secondary full joinCast" data-id="${c.id}">${esc(c.name)}</button>`).join('')}</div>`:`<div class="empty">参加できる出演者がありません。ホスト側の設定を確認してください。</div>`}</section>`, `<div class="room-code">${esc(roomCode)}</div>`);
     document.querySelectorAll('.joinCast').forEach(b=>b.onclick=async()=>{
-      try{const d=await api(`/api/rooms/${roomCode}/join`,{method:'POST',body:JSON.stringify({castId:b.dataset.id})});localStorage.setItem(`fw_player_${roomCode}`,d.playerToken);startPlayer(d.playerToken);}catch(e){notify(e.message)}
+      try{const d=await api(`/api/rooms/${roomCode}/join`,{method:'POST',body:JSON.stringify({castId:b.dataset.id})});localStorage.setItem(playerStorageKey(),d.playerToken);startPlayer(d.playerToken);}catch(e){notify(e.message)}
     });
-  }catch(e){ app.innerHTML=shell(`<section class="card"><h2>参加できません</h2><p>${esc(e.message)}</p><a class="btn secondary" href="/">トップへ</a></section>`); }
+  }catch(e){ app.innerHTML=shell(`<section class="card"><h2>参加できません</h2><p>${esc(e.message)}</p><a class="button-link secondary" href="/">トップへ</a></section>`); }
 }
 
 function roleCard(state){
@@ -119,10 +124,9 @@ function roleCard(state){
 
 function draftKey(state,kind){
   const pid=state?.player?.id || 'player';
-  return `fw_draft_${roomCode}_${pid}_${kind}_${state?.roundIndex ?? 0}`;
+  return `fw_draft_${roomCode}_${pid}_${kind}_${state?.roundIndex ?? 0}${storageSuffix}`;
 }
 function getDraft(state,kind){ try{return sessionStorage.getItem(draftKey(state,kind))||'';}catch(_){return '';} }
 function setDraft(state,kind,value){ try{value?sessionStorage.setItem(draftKey(state,kind),value):sessionStorage.removeItem(draftKey(state,kind));}catch(_){} }
 function clearDraft(state,kind){ setDraft(state,kind,''); }
 function selectedAttr(value,current){ return value&&value===current?' selected':''; }
-
