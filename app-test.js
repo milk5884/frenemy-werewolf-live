@@ -19,22 +19,28 @@ async function renderTestView(){
     }));
     app.innerHTML = shell(`
       <section class="test-head">
-        <div><div class="eyebrow">MULTI DEVICE TEST</div><h1>テストビュー</h1><p>ホスト端末と出演者端末を1画面に並べます。各出演者枠は最初から名前に固定されます。</p></div>
-        <div class="test-actions"><button class="secondary" id="reloadFrames">全端末を再読込</button><button class="secondary" id="testReadyFromView">一括で開始条件を満たす</button><button class="ghost" id="clearTestStorage">テスト保存を削除</button></div>
+        <div><div class="eyebrow">MULTI DEVICE TEST</div><h1>テストビュー</h1><p>ホスト端末と出演者端末を1画面に並べます。多人数でも見渡せるよう、出演者端末はコンパクト表示になります。</p></div>
+        <div class="test-actions"><button class="secondary" id="reloadFrames">全端末を再読込</button><button class="secondary" id="testReadyFromView">一括で開始条件を満たす</button><button class="secondary" id="toggleHostFrame">ホスト端末を隠す</button><button class="ghost" id="clearTestStorage">テスト保存を削除</button></div>
       </section>
       <section class="test-guide card">
         <b>検証手順</b>
-        <span>1. 各出演者枠が自動で参加</span>
-        <span>2. 各出演者枠でアンケート回答</span>
-        <span>3. ホスト端末でアンケート確定 → ゲーム開始</span>
+        <span>出演者 ${state.roster.length}人</span>
+        <span>役職確認時は「ホスト端末を隠す」で出演者だけ一覧できます</span>
+        <span>各枠の「別窓」から大きく開けます</span>
         <span>急ぎの場合は「一括で開始条件を満たす」</span>
       </section>
-      <div class="test-grid">
-        ${testFrameHtml('ホスト端末', hostFrame, 'host')}
+      <div class="test-grid compact-test-grid" id="testGrid">
+        ${testFrameHtml('ホスト端末', hostFrame, 'host', true)}
         ${playerFrames.map((p,i)=>testFrameHtml(`出演者 ${i+1}: ${p.title}`, p.url, p.slot)).join('')}
       </div>
     `, `<div class="room-code">${esc(roomCode)}</div>`);
     document.getElementById('reloadFrames').onclick=()=>document.querySelectorAll('.test-frame iframe').forEach(f=>f.contentWindow?.location.reload());
+    const toggleHost=document.getElementById('toggleHostFrame');
+    if(toggleHost)toggleHost.onclick=()=>{
+      const grid=document.getElementById('testGrid');
+      const hidden=grid.classList.toggle('hide-host-frame');
+      toggleHost.textContent=hidden?'ホスト端末を表示':'ホスト端末を隠す';
+    };
     document.getElementById('testReadyFromView').onclick=async()=>{
       try{
         await api(`/api/rooms/${roomCode}/host/test-ready?token=${encodeURIComponent(token)}`,{method:'POST',body:'{}'});
@@ -53,6 +59,6 @@ async function renderTestView(){
     app.innerHTML=shell(`<section class="card center"><h2>テストビューを開けません</h2><p>${esc(e.message)}</p></section>`, `<div class="room-code">${esc(roomCode)}</div>`);
   }
 }
-function testFrameHtml(title,url,slot){
-  return `<section class="test-frame" data-slot="${esc(slot)}"><div class="test-frame-bar"><b>${esc(title)}</b><a href="${esc(url)}" target="_blank" rel="noopener">別窓</a></div><iframe src="${esc(url)}" title="${esc(title)}"></iframe></section>`;
+function testFrameHtml(title,url,slot,isHost=false){
+  return `<section class="test-frame ${isHost?'test-frame-host':'test-frame-player'}" data-slot="${esc(slot)}"><div class="test-frame-bar"><b>${esc(title)}</b><a href="${esc(url)}" target="_blank" rel="noopener">別窓</a></div><iframe src="${esc(url)}" title="${esc(title)}"></iframe></section>`;
 }
