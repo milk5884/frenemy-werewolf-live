@@ -6,7 +6,7 @@ async function startHost(){
     try{
       const state=await api(hostUrl(''));
       hideConnectionBanner();
-      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started});
+      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,autoAdvance:state.autoAdvance,phaseChangedAt:state.phaseChangedAt,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(hostDashboard(state),`<div class="room-code">${esc(state.code)}</div>`);
@@ -21,6 +21,8 @@ function bindHost(state){
   const copySurvey=document.getElementById('copySurvey'); if(copySurvey)copySurvey.onclick=()=>copyText(`${currentBaseUrl()}/?mode=survey&room=${state.code}&key=${state.surveyKey}`);
   const openTest=document.getElementById('openTestView'); if(openTest)openTest.onclick=()=>window.open(`/?mode=test&room=${state.code}&token=${encodeURIComponent(getHostToken())}`,'_blank');
   const edit=document.getElementById('editSetup'); if(edit)edit.onclick=()=>openSetupFrom(state);
+  const auto=document.getElementById('autoAdvanceToggle'); if(auto)auto.onclick=async()=>{try{await api(hostUrl('/auto'),{method:'POST',body:JSON.stringify({autoAdvance:!state.autoAdvance})});notify(!state.autoAdvance?'自動進行をONにしました':'自動進行をOFFにしました');lastHostSig='';await startHost();}catch(e){notify(e.message)}};
+  const autoStep=document.getElementById('autoStepNow'); if(autoStep)autoStep.onclick=async()=>{try{await api(hostUrl('/auto-step'),{method:'POST',body:'{}'});lastHostSig='';await startHost();}catch(e){notify(e.message)}};
   const testReady=document.getElementById('testReady'); if(testReady)testReady.onclick=async()=>{try{await api(hostUrl('/test-ready'),{method:'POST',body:'{}'});notify('テスト準備を完了しました');lastHostSig='';await startHost();}catch(e){notify(e.message)}};
   const fin=document.getElementById('finalizeSurvey'); if(fin)fin.onclick=async()=>{try{await api(hostUrl('/finalize-survey'),{method:'POST',body:'{}'});lastHostSig='';await startHost();}catch(e){notify(e.message)}};
   const start=document.getElementById('startGame'); if(start)start.onclick=async()=>{try{await api(hostUrl('/start'),{method:'POST',body:'{}'});lastHostSig='';await startHost();}catch(e){notify(e.message)}};
