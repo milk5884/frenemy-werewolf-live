@@ -24,6 +24,7 @@ let shareBase = `${location.protocol}//${location.host}`;
 let lastHostSig = '';
 let setupOpen = false;
 let editingSetup = false;
+let lastSceneKey = '';
 
 function esc(v=''){ return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fmtTime(sec){ sec=Math.max(0,Math.ceil(sec)); return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
@@ -63,6 +64,30 @@ function phaseProgressHtml(state,compact=false){
     const idx=order.indexOf(p); const cls=idx<active?'done':idx===active?'active':'todo';
     return `<div class="phase-step ${cls}"><span></span><b>${esc(phaseLabels[p]||p)}</b></div>`;
   }).join('')}</div>`;
+}
+function sceneForState(state){
+  if(!state||!state.started)return null;
+  const round = Number(state.roundIndex||0)+1;
+  if(state.phase==='theme') return {kind:'day', icon:'☀️', title:'朝が来ました', text:`ROUND ${round} が始まります`, tone:'day'};
+  if(state.phase==='attack') return {kind:'night', icon:'🌙', title:'夜になりました', text:'フレネミーが襲撃先を選びます', tone:'night'};
+  if(state.phase==='suspectVote') return {kind:'dawn', icon:'🌅', title:'夜が明けました', text:state.latestAttack?.name?`${state.latestAttack.name} が襲撃されました`:'襲撃結果を確認してください', tone:'dawn'};
+  if(state.phase==='roundEnd') return {kind:'end', icon:'📣', title:'ラウンド終了', text:state.latestElimination?.name?`${state.latestElimination.name} が追放されました`:'次のラウンドへ進みます', tone:'end'};
+  if(state.phase==='gameOver') return {kind:'gameover', icon:'🏁', title:'ゲーム終了', text:'すべての結果を確認してください', tone:'end'};
+  return null;
+}
+function maybeShowSceneOverlay(state){
+  const scene=sceneForState(state);
+  if(!scene)return;
+  const key=`${state.code||roomCode}:${state.roundIndex}:${state.phase}:${scene.text}`;
+  if(key===lastSceneKey)return;
+  lastSceneKey=key;
+  const old=document.querySelector('.scene-overlay'); if(old)old.remove();
+  const el=document.createElement('div');
+  el.className=`scene-overlay scene-overlay-${scene.tone}`;
+  el.innerHTML=`<div class="scene-orb">${esc(scene.icon)}</div><div class="scene-overlay-kicker">${esc(scene.kind.toUpperCase())}</div><div class="scene-overlay-title">${esc(scene.title)}</div><div class="scene-overlay-text">${esc(scene.text)}</div>`;
+  document.body.appendChild(el);
+  setTimeout(()=>el.classList.add('leaving'),2100);
+  setTimeout(()=>el.remove(),2850);
 }
 function showConnectionBanner(msg='通信が不安定です。自動で再接続しています…'){
   let b=document.getElementById('connectionBanner');
