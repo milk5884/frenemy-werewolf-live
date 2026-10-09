@@ -14,7 +14,7 @@ function hostDashboard(state){
     <section style="grid-column:span 12">${phaseProgressHtml(state)}</section>
     <section class="card half"><h2>出演者</h2><div class="list">${state.roster.map(c=>`<div class="row ${c.alive?'':'dead'}"><div>${c.role?roleIcon(c.role):'<span class="role-icon"><span>?</span></span>'} <b>${esc(c.name)}</b><small>${c.joined?'参加済み':'未参加'} ${c.surveySubmitted?' / アンケート済み':' / アンケート未回答'} ${c.roleSeen?' / 役職確認済み':''}</small></div><div>${c.alive?'生存':'脱落'}</div></div>`).join('')}</div></section>
     <section class="card half">${hostPhasePanel(state,canStart,round,startInfo)}</section>
-    <section class="card" style="grid-column:span 12"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2>ホストも出演者として参加</h2><p class="muted">この枠はホスト専用の出演者端末です。初期状態では ${esc(hostCast?.name||'先頭の出演者')} に固定しています。別の名前で入りたい場合は出演者URLを別窓で開いてください。</p></div><a class="button-link secondary" href="${esc(hostPlayerUrl)}" target="_blank" rel="noopener">別窓で開く</a></div><iframe src="${esc(hostPlayerUrl)}" title="ホスト出演者端末" style="width:100%;height:680px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:#09090d;margin-top:12px"></iframe></section>
+    <section class="card" style="grid-column:span 12"><div class="host-player-head"><div><h2>ホストも出演者として参加</h2><p class="muted">この枠はホスト専用の出演者端末です。初期状態では ${esc(hostCast?.name||'先頭の出演者')} に固定しています。別の名前で入りたい場合は出演者URLを別窓で開いてください。</p></div><a class="button-link secondary" href="${esc(hostPlayerUrl)}" target="_blank" rel="noopener">別窓で開く</a></div><iframe class="host-player-frame" src="${esc(hostPlayerUrl)}" title="ホスト出演者端末"></iframe></section>
   </div>`;
 }
 function startRequirementInfo(state){
@@ -30,16 +30,30 @@ function startRequirementInfo(state){
 function hostPhasePanel(state,canStart,round,startInfo=startRequirementInfo(state)){
   if(state.phase==='lobby') return `<h2>ゲーム開始前</h2><p>出演者が参加後にアンケートへ回答し、ホストが結果確定すると開始できます。</p><button class="secondary full" id="finalizeSurvey" ${(state.playerSurveyCount||0)>=state.roster.length&&state.roster.length?'':'disabled'}>アンケート結果を確定</button><button class="secondary full" id="testReady" ${state.started?'disabled':''}>テスト用：参加＋アンケート確定を一括完了</button><button class="big full" id="startGame" ${canStart?'':'disabled'}>ゲーム開始</button><div class="start-check ${canStart?'good':'bad'}"><b>${canStart?'開始できます':'開始できません'}</b>${canStart?'<span>条件を満たしています。</span>':startInfo.missing.map(x=>`<span>・${esc(x)}</span>`).join('')}</div><div class="small muted">本番条件：全員参加＋出演者全員のアンケート回答＋アンケート確定</div>`;
   if(state.phase==='roleReveal') return `<h2>役職確認</h2><p>各出演者が自分の端末で役職を確認しています。</p><button class="big full phaseBtn" data-phase="theme">テーマ発表へ</button>`;
-  if(state.phase==='theme') return `<h2>テーマ</h2><div class="theme-title">${esc(round?.title||'')}</div><button class="big full phaseBtn" data-phase="frenemyInfo">フレネミー情報へ</button>`;
-  if(state.phase==='frenemyInfo') return `<h2>フレネミー情報</h2><p>フレネミーだけが各端末でターゲットを確認します。</p><button class="big full phaseBtn" data-phase="seer">占いへ</button>`;
+  if(state.phase==='theme') return `${hostScene('☀️','朝が来ました','新しいラウンドを開始します。')}<h2>テーマ</h2><div class="theme-title">${esc(round?.title||'')}</div><button class="big full phaseBtn" data-phase="frenemyInfo">フレネミー情報へ</button>`;
+  if(state.phase==='frenemyInfo') return `<h2>フレネミー情報</h2><p>脱落者を除いた現在1位を、フレネミーの端末だけに表示します。ホスト画面・市民画面には名前を出しません。</p><button class="big full phaseBtn" data-phase="seer">占いへ</button>`;
   if(state.phase==='seer') return `<h2>占い</h2><p>占い師が1人の事前順位を確認します。</p><button class="big full phaseBtn" data-phase="discussion">議論開始</button>`;
-  if(state.phase==='discussion') return `<h2>議論</h2><div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(((state.timerEndsAt||0)-Date.now())/1000)}</div><button class="big full phaseBtn" data-phase="finalVote">最終投票へ</button>`;
+  if(state.phase==='discussion') return `${hostScene('🎙️','議論開始','誰がランキングを操作しているのか話し合います。')}<div class="timer" data-timer-end="${state.timerEndsAt||0}">${fmtTime(((state.timerEndsAt||0)-Date.now())/1000)}</div><button class="big full phaseBtn" data-phase="finalVote">最終投票へ</button>`;
   if(state.phase==='finalVote'){const c=Object.keys(state.finalVotes||{}).length;return `<h2>最終投票</h2><div class="metric">${c} / ${aliveCount(state)}票</div>${voteList(state,state.finalVotes)}<button class="big full phaseBtn" data-phase="result">結果発表へ</button>`;}
-  if(state.phase==='result'){const r=state.roundResult||{};return `<h2>結果</h2><div class="result-win ${r.success?'bad':'good'}">${r.success?'フレネミー成功':'フレネミー失敗'}</div><p>事前1位：${esc(r.officialTopName||'—')}</p><p>最終1位：${(r.winnerNames||[]).map(esc).join(' / ')||'—'}</p><button class="big full phaseBtn" data-phase="${r.success?'attack':'suspectVote'}">${r.success?'襲撃へ':'フレネミー投票へ'}</button>`;}
-  if(state.phase==='attack') return `<h2>襲撃</h2>${voteList(state,state.attackVotes)}<button class="danger big full" id="resolveAttack">襲撃を解決</button>`;
-  if(state.phase==='suspectVote'){const c=Object.keys(state.suspectVotes||{}).length;return `<h2>フレネミー投票</h2><div class="metric">${c} / ${aliveCount(state)}票</div>${voteList(state,state.suspectVotes)}<button class="big full" id="resolveSuspect">最多票を追放</button>`;}
-  if(state.phase==='roundEnd') return `<h2>ラウンド終了</h2><button class="big full" id="nextRound">次のラウンドへ</button>`;
+  if(state.phase==='result'){const r=state.roundResult||{};return `${hostScene(r.success?'😈':'🛡️',r.success?'フレネミー成功':'フレネミー失敗',r.success?'現在1位を最終投票1位から落としました。':'現在1位が最終投票でも守られました。')}<h2>投票結果</h2><p>ターゲット：${esc(r.officialTopName||'—')}</p><p>最終1位：${(r.winnerNames||[]).map(esc).join(' / ')||'—'}</p>${voteResultTable(r)}<button class="big full phaseBtn" data-phase="${r.success?'attack':'suspectVote'}">${r.success?'夜へ：襲撃へ':'朝へ：フレネミー投票へ'}</button>`;}
+  if(state.phase==='attack') return `${hostScene('🌙','夜になりました','フレネミーが襲撃先を選びます。')}<h2>襲撃</h2>${voteList(state,state.attackVotes)}<button class="danger big full" id="resolveAttack">襲撃を解決</button>`;
+  if(state.phase==='suspectVote'){const c=Object.keys(state.suspectVotes||{}).length;return `${hostScene('🌅','夜が明けました',state.latestAttack?.name?`${state.latestAttack.name} が襲撃されました。`:'襲撃結果を確認します。')}<h2>フレネミー投票</h2><div class="metric">${c} / ${aliveCount(state)}票</div>${voteList(state,state.suspectVotes)}${suspectTallyTable(state)}<button class="big full" id="resolveSuspect">最多票を追放</button>`;}
+  if(state.phase==='roundEnd') return `${hostScene('📣','ラウンド終了',state.latestElimination?.name?`${state.latestElimination.name} が追放されました。`:'投票結果を確認しました。')}<h2>次のラウンドへ</h2><button class="big full" id="nextRound">次のラウンドへ</button>`;
   if(state.phase==='gameOver') return `<h2>ゲーム終了</h2><button class="ghost full" id="resetGame">リセット</button>`;
   return `<h2>進行中</h2>`;
 }
+function hostScene(icon,title,text){return `<div class="scene-card compact-scene"><div class="scene-icon">${icon}</div><div><div class="kicker">SCENE</div><h2>${esc(title)}</h2><p>${esc(text||'')}</p></div></div>`;}
 function voteList(state,votes={}){const rows=Object.entries(votes).map(([from,to])=>`<div class="row"><span>${esc(nameOf(state,from))}</span><b>→ ${esc(nameOf(state,to))}</b></div>`);return rows.length?`<div class="list">${rows.join('')}</div>`:`<div class="empty">まだ選択がありません</div>`;}
+function voteResultTable(r){
+  const rows=(r.voteRows||[]).filter(x=>x.count>0);
+  if(!rows.length)return `<div class="empty">投票結果がありません</div>`;
+  const max=Math.max(...rows.map(x=>x.count));
+  return `<div class="vote-table">${rows.map((x,i)=>`<div class="vote-row ${x.count===max?'top':''}"><span>${i+1}位 ${esc(x.name)}</span><b>${x.count}票</b></div>`).join('')}</div>`;
+}
+function suspectTallyTable(state){
+  const counts=tally(state.suspectVotes||{});
+  const rows=state.roster.filter(c=>counts[c.id]).map(c=>({name:c.name,count:counts[c.id]})).sort((a,b)=>b.count-a.count);
+  if(!rows.length)return '';
+  const max=Math.max(...rows.map(x=>x.count));
+  return `<div class="vote-table"><div class="kicker">現在の疑い票</div>${rows.map((x,i)=>`<div class="vote-row ${x.count===max?'top':''}"><span>${i+1}位 ${esc(x.name)}</span><b>${x.count}票</b></div>`).join('')}</div>`;
+}
