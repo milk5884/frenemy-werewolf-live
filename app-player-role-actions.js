@@ -12,6 +12,24 @@ bindPlayer=function(state,token){
       await refreshPlayer(token);
     }catch(e){await handlePlayerActionError(e)}
   };
+  const spoofer=document.getElementById('spooferBtn');
+  if(spoofer)spoofer.onclick=async()=>{
+    const leftId=document.getElementById('spooferLeft')?.value;
+    const rightId=document.getElementById('spooferRight')?.value;
+    if(!leftId||!rightId)return notify('入れ替える2人を選んでください');
+    if(leftId===rightId)return notify('別々の2人を選んでください');
+    try{
+      await api(`/api/rooms/${roomCode}/player/spoofer?token=${token}`,{method:'POST',body:JSON.stringify({leftId,rightId})});
+      await refreshPlayer(token);
+    }catch(e){await handlePlayerActionError(e)}
+  };
+  const spooferSkip=document.getElementById('spooferSkipBtn');
+  if(spooferSkip)spooferSkip.onclick=async()=>{
+    try{
+      await api(`/api/rooms/${roomCode}/player/spoofer?token=${token}`,{method:'POST',body:JSON.stringify({skip:true})});
+      await refreshPlayer(token);
+    }catch(e){await handlePlayerActionError(e)}
+  };
   const guard=document.getElementById('guardBtn');
   if(guard)guard.onclick=async()=>{
     const targetId=document.getElementById('guardTarget')?.value;
