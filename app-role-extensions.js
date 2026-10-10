@@ -1,8 +1,10 @@
 Object.assign(roleMeta,{
   knight:{label:'騎士',emoji:'🛡️',symbol:'盾',cls:'role-knight',desc:'夜に1人を護衛できます。襲撃先と護衛先が一致すると、その襲撃を防ぎます。'},
   medium:{label:'霊媒師',emoji:'🕯️',symbol:'霊',cls:'role-medium',desc:'追放された人の正体を確認できます。フレネミー陣営だったかを次の判断材料にできます。'},
-  comparer:{label:'比較者',emoji:'⚖️',symbol:'比',cls:'role-comparer',desc:'議論前に2人を選び、どちらが事前アンケート順位で上か確認できます。'},
-  narcissist:{label:'ナルシスト',emoji:'💖',symbol:'自',cls:'role-narcissist',desc:'自分への投票を狙いやすい個人色の強い役職です。自己投票時に特殊表示されます。'},
-  mounter:{label:'マウンター',emoji:'👑',symbol:'冠',cls:'role-mounter',desc:'ランキング投票で自分の1票が2票分として集計されます。'},
-  spoofer:{label:'なりすまし',emoji:'🎭',symbol:'偽',cls:'role-spoofer',desc:'フレネミー陣営寄りの妨害役です。占いでは市民のように見えます。'}
+  comparer:{label:'比較者',emoji:'⚖️',symbol:'比',cls:'role-comparer',desc:'議論前に2人を選び、どちらが事前順位で上か、または同率かを確認できます。'},
+  analyst:{label:'アナリスト',emoji:'📊',symbol:'分',cls:'role-analyst',desc:'調査用ランキングの1位と2位の得点差を確認できます。'},
+  coroner:{label:'検死官',emoji:'☠️',symbol:'検',cls:'role-coroner',desc:'脱落者の中に、調査用ランキングの初期1位が含まれているかを確認できます。'},
+  spoofer:{label:'工作員',emoji:'🎭',symbol:'工',cls:'role-spoofer',desc:'フレネミー陣営寄りの妨害役です。1ゲームに1回、調査用ランキングだけ2人を入れ替えられます。'},
+  narcissist:{label:'ナルシスト',emoji:'💖',symbol:'自',cls:'role-narcissist',desc:'自分の現在順位と、TOP3に入っているかを確認できます。'},
+  mounter:{label:'マウンター',emoji:'👑',symbol:'冠',cls:'role-mounter',desc:'自分より下位にいる生存者を確認できます。'}
 });
