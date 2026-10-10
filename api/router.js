@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 import { createRoomPersisted, loadRoom, updateRoom, storageMode } from '../lib/storage.js';
-import { ROLE_LABELS, ROLE_ORDER, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks, compareRoundChecks, normalizeRoleCounts, rankOf, isFrenemySide } from '../lib/game.js';
+import { ROLE_LABELS, ROLE_ORDER, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks, compareRoundChecks, spooferRoundActions, spooferUsed, normalizeRoleCounts, rankOf, compareInfo, isFrenemySide } from '../lib/game.js';
 
 function send(res,status,obj){
   res.statusCode=status;
@@ -37,6 +37,12 @@ function sanitizeLiveState(room){
   for(const key of ['finalVotes','suspectVotes','attackVotes','guardVotes','discussionSkips']){
     if(room[key])for(const cid of Object.keys(room[key]))if(!valid.has(cid))delete room[key][cid];
   }
+  for(const key of ['seerChecks','compareChecks','spooferActions']){
+    if(!room[key])continue;
+    for(const round of Object.keys(room[key])){
+      for(const cid of Object.keys(room[key][round]||{}))if(!valid.has(cid))delete room[key][round][cid];
+    }
+  }
 }
 function ensureTestReady(room){
   if(room.started)throw new Error('ゲーム開始後はテスト準備できません');
@@ -55,7 +61,6 @@ async function tickAuto(code,room){
   const result=await updateRoom(code,r=>{sanitizeLiveState(r);autoAdvance(r);return{view:'room'};});
   return result?.room||room;
 }
-function seenRoleFor(target){return target?.role==='spoofer'?'citizen':target?.role;}
 
 export default async function handler(req,res){
   const url=new URL(req.url,`https://${req.headers.host||'localhost'}`), apiPath=apiPathOf(url), parts=partsOf(url);
@@ -95,7 +100,7 @@ export default async function handler(req,res){
           sanitizeLiveState(r);
           r.surveySubmissions={};
           r.surveyFinalized=false;
-          r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.guardVotes={};r.discussionSkips={};r.seerChecks={};r.compareChecks={};
+          r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.guardVotes={};r.discussionSkips={};r.seerChecks={};r.compareChecks={};r.spooferActions={};
           return {view:'host'};
         }
         if(parts[4]==='auto'&&req.method==='POST'){
@@ -141,7 +146,7 @@ export default async function handler(req,res){
           return{view:'host'};
         }
         if(parts[4]==='reset'&&req.method==='POST'){
-          r.phase='lobby';r.started=false;r.roundIndex=0;r.timerEndsAt=null;r.seerChecks={};r.compareChecks={};r.history=[];
+          r.phase='lobby';r.started=false;r.roundIndex=0;r.timerEndsAt=null;r.seerChecks={};r.compareChecks={};r.spooferActions={};r.history=[];
           resetRound(r);
           r.roster.forEach(c=>{c.role=null;c.alive=true;});
           Object.values(r.joins||{}).forEach(j=>j.roleSeen=false);
@@ -210,10 +215,9 @@ export default async function handler(req,res){
           const legacy=r.seerChecks[r.roundIndex];
           if(legacy?.seerId)r.seerChecks[r.roundIndex]={[legacy.seerId]:legacy};
           if(!r.seerChecks[r.roundIndex])r.seerChecks[r.roundIndex]={};
-          const seenRole=seenRoleFor(target);
-          r.seerChecks[r.roundIndex][cast.id]={seerId:cast.id,targetId:b.targetId,rank,seenRole};
+          r.seerChecks[r.roundIndex][cast.id]={seerId:cast.id,targetId:b.targetId,rank};
           if(r.autoAdvance)autoAdvance(r);
-          return{json:{targetName:target.name,rank,seenRole,seenRoleLabel:ROLE_LABELS[seenRole]}};
+          return{json:{targetName:target.name,rank}};
         }
         if(parts[4]==='compare'&&req.method==='POST'){
           if(cast.role!=='comparer'||!cast.alive||r.phase!=='seer')throw new Error('現在は比較できません');
@@ -221,16 +225,33 @@ export default async function handler(req,res){
           if(checks[cast.id])throw new Error('このラウンドではすでに比較しています');
           const b=await body(req),left=byCast(r,b.leftId),right=byCast(r,b.rightId);
           if(!left||!right||left.id===right.id)throw new Error('比較する2人を選んでください');
-          const leftRank=rankOf(r,left.id),rightRank=rankOf(r,right.id);
-          if(!leftRank||!rightRank)throw new Error('順位が見つかりません');
-          const higherId=leftRank<rightRank?left.id:right.id;
+          const info=compareInfo(r,left.id,right.id);
+          if(!info)throw new Error('順位が見つかりません');
           if(!r.compareChecks)r.compareChecks={};
           const legacy=r.compareChecks[r.roundIndex];
           if(legacy?.comparerId)r.compareChecks[r.roundIndex]={[legacy.comparerId]:legacy};
           if(!r.compareChecks[r.roundIndex])r.compareChecks[r.roundIndex]={};
-          r.compareChecks[r.roundIndex][cast.id]={comparerId:cast.id,leftId:left.id,rightId:right.id,leftRank,rightRank,higherId};
+          r.compareChecks[r.roundIndex][cast.id]={comparerId:cast.id,...info};
           if(r.autoAdvance)autoAdvance(r);
-          return{json:{leftName:left.name,rightName:right.name,leftRank,rightRank,higherName:byCast(r,higherId)?.name}};
+          return{json:{leftName:left.name,rightName:right.name,leftRank:info.leftRank,rightRank:info.rightRank,isTie:info.isTie,higherName:info.higherId?byCast(r,info.higherId)?.name:null}};
+        }
+        if(parts[4]==='spoofer'&&req.method==='POST'){
+          if(cast.role!=='spoofer'||!cast.alive||r.phase!=='seer')throw new Error('現在は工作できません');
+          if(!r.spooferActions)r.spooferActions={};
+          if(!r.spooferActions[r.roundIndex])r.spooferActions[r.roundIndex]={};
+          const roundActions=spooferRoundActions(r);
+          if(roundActions[cast.id])throw new Error('このラウンドではすでに選択済みです');
+          const b=await body(req);
+          if(b.skip){
+            r.spooferActions[r.roundIndex][cast.id]={spooferId:cast.id,skip:true};
+          }else{
+            if(spooferUsed(r,cast.id))throw new Error('工作能力は1ゲーム1回だけ使用できます');
+            const left=byCast(r,b.leftId), right=byCast(r,b.rightId);
+            if(!left||!right||left.id===right.id)throw new Error('入れ替える2人を選んでください');
+            r.spooferActions[r.roundIndex][cast.id]={spooferId:cast.id,used:true,leftId:left.id,rightId:right.id};
+          }
+          if(r.autoAdvance)autoAdvance(r);
+          return{json:{ok:true}};
         }
         if(parts[4]==='discussion-skip'&&req.method==='POST'){
           if(!cast.alive||r.phase!=='discussion')throw new Error('現在は議論をスキップできません');
