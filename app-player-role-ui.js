@@ -11,27 +11,71 @@ function fwRoleScreen(state,{tone='action',title,subtitle,icon='✦',body=''}){
     <div class="app-player-strip"><span>${roleIcon(state.player.role)} ${esc(state.player.name)}</span><span>${esc(state.player.roleLabel||'')}</span></div>
   </section>`;
 }
+function fwInfoList(items){return `<div class="app-two-stack">${items.map(([k,v])=>`<div class="app-info-line"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;}
+function fwMini(html){return `<div class="app-mini-secret">${html}</div>`;}
 
 const fwBasePlayerPhaseHtml=playerPhaseHtml;
 playerPhaseHtml=function(state){
   const me=state.player;
+  const infoPhase=['seer','discussion','finalVote'].includes(state.phase);
   if(state.phase==='seer'&&me.role==='seer'&&me.alive&&state.seerCheck){
-    return fwRoleScreen(state,{tone:'secret',icon:'🔮',title:'占い結果',subtitle:'対象の事前順位と、占いで見えた役職です。なりすましは市民のように見えます。',body:`
-      <div class="app-target-card"><div class="app-overline">FORTUNE RESULT</div><h2>${esc(state.seerCheck.targetName)}</h2><p>事前 ${state.seerCheck.rank}位 / 見えた役職：${esc(state.seerCheck.seenRoleLabel||'—')}</p></div>
+    return fwRoleScreen(state,{tone:'secret',icon:'🔮',title:'占い結果',subtitle:'対象の事前アンケート順位です。',body:`
+      <div class="app-target-card"><div class="app-overline">FORTUNE RESULT</div><h2>${esc(state.seerCheck.targetName)}</h2><p>調査上の事前順位：${state.seerCheck.rank}位</p></div>
       <div class="app-action-panel"><button class="secondary full" disabled>占い済み</button></div>`});
   }
   if(state.phase==='seer'&&me.role==='comparer'&&me.alive){
     if(state.compareCheck){
-      return fwRoleScreen(state,{tone:'secret',icon:'⚖️',title:'比較結果',subtitle:'2人のうち、事前アンケート順位が上だった人です。',body:`
-        <div class="app-target-card"><div class="app-overline">HIGHER RANK</div><h2>${esc(state.compareCheck.higherName||'—')}</h2><p>${esc(state.compareCheck.leftName)}：${state.compareCheck.leftRank}位 / ${esc(state.compareCheck.rightName)}：${state.compareCheck.rightRank}位</p></div>
+      const text=state.compareCheck.isTie?'同率':`${state.compareCheck.higherName||'—'} が上`;
+      return fwRoleScreen(state,{tone:'secret',icon:'⚖️',title:'比較結果',subtitle:'2人の調査上の順位を比較しました。',body:`
+        <div class="app-target-card"><div class="app-overline">COMPARE RESULT</div><h2>${esc(text)}</h2><p>${esc(state.compareCheck.leftName)}：${state.compareCheck.leftRank}位 / ${esc(state.compareCheck.rightName)}：${state.compareCheck.rightRank}位</p></div>
         <div class="app-action-panel"><button class="secondary full" disabled>比較済み</button></div>`});
     }
-    return fwRoleScreen(state,{tone:'action',icon:'⚖️',title:'2人を比較する',subtitle:'議論前に、どちらが事前順位で上か確認できます。',body:`
+    return fwRoleScreen(state,{tone:'action',icon:'⚖️',title:'2人を比較する',subtitle:'議論前に、どちらが事前順位で上か、または同率かを確認できます。',body:`
       <div class="app-action-panel">
         <label class="app-select-label">1人目<select id="compareLeft"><option value="">選択してください</option>${fwRoleOptions(state)}</select></label>
         <label class="app-select-label">2人目<select id="compareRight"><option value="">選択してください</option>${fwRoleOptions(state)}</select></label>
         <button class="big full" id="compareBtn">この2人を比較する</button>
       </div>`});
+  }
+  if(state.phase==='seer'&&me.role==='spoofer'&&me.alive){
+    if(state.spooferUsed&&!state.spooferDecision){
+      return fwRoleScreen(state,{tone:'wait',icon:'🎭',title:'工作済み',subtitle:'工作能力は1ゲーム1回だけです。以降は通常通り議論に参加してください。',body:`<div class="app-message"><div class="app-message-icon">🎭</div><h2>使用済み</h2><p>調査用ランキングへの工作はすでに使用されています。</p></div>`});
+    }
+    if(state.spooferDecision){
+      const text=state.spooferDecision.used?`${state.spooferDecision.leftName} と ${state.spooferDecision.rightName} を入れ替えました`:'このラウンドでは使用しません';
+      return fwRoleScreen(state,{tone:'secret',icon:'🎭',title:'工作選択済み',subtitle:'この選択は調査用ランキングだけに影響します。真ランキングや勝敗判定は変わりません。',body:`<div class="app-message"><div class="app-message-icon">🎭</div><h2>${esc(text)}</h2><p>他の情報役職の行動を待っています。</p></div>`});
+    }
+    return fwRoleScreen(state,{tone:'action',icon:'🎭',title:'調査用ランキングを工作',subtitle:'1ゲームに1回だけ、調査用ランキング上の2人を入れ替えられます。使わず温存もできます。',body:`
+      <div class="app-action-panel">
+        <label class="app-select-label">入れ替える人 A<select id="spooferLeft"><option value="">選択してください</option>${fwRoleOptions(state)}</select></label>
+        <label class="app-select-label">入れ替える人 B<select id="spooferRight"><option value="">選択してください</option>${fwRoleOptions(state)}</select></label>
+        <button class="big full" id="spooferBtn">この2人を入れ替える</button>
+        <button class="secondary full" id="spooferSkipBtn">このラウンドでは使わない</button>
+      </div>`});
+  }
+  if(infoPhase&&me.role==='narcissist'&&state.narcissistInfo){
+    const info=state.narcissistInfo;
+    return fwRoleScreen(state,{tone:'secret',icon:'💖',title:'あなたの現在順位',subtitle:'ナルシストは、自分がどの位置にいるかを確認できます。',body:`
+      <div class="app-target-card"><div class="app-overline">MY RANK</div><h2>${info.rank}位</h2><p>${info.inTop3?'TOP3に入っています':'TOP3外です'} / 生存者 ${info.aliveTotal}人中</p></div>
+      <div class="app-action-panel"><button class="secondary full" disabled>この情報を使って議論してください</button></div>`});
+  }
+  if(infoPhase&&me.role==='mounter'&&state.mounterInfo){
+    const lower=state.mounterInfo.lowerNames?.length?state.mounterInfo.lowerNames.join(' / '):'下位の生存者はいません';
+    return fwRoleScreen(state,{tone:'secret',icon:'👑',title:'あなたより下位の人',subtitle:'マウンターは、自分より下にいる生存者を確認できます。',body:`
+      <div class="app-target-card"><div class="app-overline">BELOW YOU</div><h2>${state.mounterInfo.lowerCount}人</h2><p>${esc(lower)}</p></div>
+      <div class="app-action-panel"><button class="secondary full" disabled>この情報を使って議論してください</button></div>`});
+  }
+  if(infoPhase&&me.role==='analyst'&&state.analystInfo){
+    const a=state.analystInfo;
+    return fwRoleScreen(state,{tone:'secret',icon:'📊',title:'1位と2位の得点差',subtitle:'アナリストは、調査用ランキング上位2人の点差を確認できます。',body:`
+      <div class="app-target-card"><div class="app-overline">POINT GAP</div><h2>${a.gap}点差</h2><p>1位 ${esc(a.firstName)}（${a.firstPoints}点） / 2位 ${esc(a.secondName)}（${a.secondPoints}点）</p></div>
+      <div class="app-action-panel"><button class="secondary full" disabled>この情報を使って議論してください</button></div>`});
+  }
+  if(['discussion','finalVote','suspectVote','roundEnd'].includes(state.phase)&&me.role==='coroner'&&state.coronerInfo){
+    const c=state.coronerInfo;
+    return fwRoleScreen(state,{tone:'secret',icon:'☠️',title:'検死結果',subtitle:'脱落者の中に、調査用ランキングの初期1位が含まれているかを確認できます。',body:`
+      <div class="app-target-card"><div class="app-overline">CORONER INFO</div><h2>${c.included?'含まれています':'含まれていません'}</h2><p>調査上の初期1位：${esc(c.initialTopName)} / 脱落者 ${c.eliminatedCount}人</p></div>
+      <div class="app-action-panel"><button class="secondary full" disabled>この情報を使って議論してください</button></div>`});
   }
   if(state.phase==='attack'&&me.role==='knight'&&me.alive){
     if(state.guarded){
@@ -48,12 +92,5 @@ playerPhaseHtml=function(state){
       <div class="app-target-card"><div class="app-overline">LAST ELIMINATED</div><h2>${esc(state.mediumInfo.name)}</h2><p>${esc(state.mediumInfo.roleLabel)} / ${state.mediumInfo.isFrenemySide?'フレネミー陣営':'市民陣営'}</p></div>
       <div class="app-action-panel"><button class="secondary full" disabled>次のラウンドを待機</button></div>`});
   }
-  const html=fwBasePlayerPhaseHtml(state);
-  if(state.phase==='finalVote'&&me.role==='mounter'&&!state.votedFinal){
-    return html.replace('<div class="app-action-panel">','<div class="app-mini-secret"><span>マウンター能力</span><b>あなたのランキング投票は2票分として集計されます。</b></div><div class="app-action-panel">');
-  }
-  if(state.phase==='finalVote'&&me.role==='narcissist'&&!state.votedFinal){
-    return html.replace('<div class="app-action-panel">','<div class="app-mini-secret"><span>ナルシスト能力</span><b>自分に投票すると特殊表示されます。</b></div><div class="app-action-panel">');
-  }
-  return html;
+  return fwBasePlayerPhaseHtml(state);
 };
