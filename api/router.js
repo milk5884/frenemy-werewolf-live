@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 import { createRoomPersisted, loadRoom, updateRoom, storageMode } from '../lib/storage.js';
-import { ROLE_LABELS, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks } from '../lib/game.js';
+import { ROLE_LABELS, ROLE_ORDER, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, currentTheme, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks, compareRoundChecks, normalizeRoleCounts, rankOf, isFrenemySide } from '../lib/game.js';
 
 function send(res,status,obj){
   res.statusCode=status;
@@ -34,10 +34,9 @@ function validateSurveyVotes(room,votes){
 function sanitizeLiveState(room){
   const valid=new Set(room.roster.map(c=>c.id));
   for(const cid of Object.keys(room.joins||{}))if(!valid.has(cid))delete room.joins[cid];
-  if(room.finalVotes)for(const cid of Object.keys(room.finalVotes))if(!valid.has(cid))delete room.finalVotes[cid];
-  if(room.suspectVotes)for(const cid of Object.keys(room.suspectVotes))if(!valid.has(cid))delete room.suspectVotes[cid];
-  if(room.attackVotes)for(const cid of Object.keys(room.attackVotes))if(!valid.has(cid))delete room.attackVotes[cid];
-  if(room.discussionSkips)for(const cid of Object.keys(room.discussionSkips))if(!valid.has(cid))delete room.discussionSkips[cid];
+  for(const key of ['finalVotes','suspectVotes','attackVotes','guardVotes','discussionSkips']){
+    if(room[key])for(const cid of Object.keys(room[key]))if(!valid.has(cid))delete room[key][cid];
+  }
 }
 function ensureTestReady(room){
   if(room.started)throw new Error('ゲーム開始後はテスト準備できません');
@@ -56,6 +55,7 @@ async function tickAuto(code,room){
   const result=await updateRoom(code,r=>{sanitizeLiveState(r);autoAdvance(r);return{view:'room'};});
   return result?.room||room;
 }
+function seenRoleFor(target){return target?.role==='spoofer'?'citizen':target?.role;}
 
 export default async function handler(req,res){
   const url=new URL(req.url,`https://${req.headers.host||'localhost'}`), apiPath=apiPathOf(url), parts=partsOf(url);
@@ -86,12 +86,16 @@ export default async function handler(req,res){
           if(b.title)r.title=String(b.title).trim().slice(0,80)||r.title;
           if(Array.isArray(b.roster))r.roster=b.roster.map((x,i)=>({id:x.id||id('c'),name:String(x.name||`PLAYER ${i+1}`).trim(),alive:true,role:null}));
           if(Array.isArray(b.themes))r.themes=b.themes.map((x,i)=>({id:x.id||id('t'),title:String(x.title||`テーマ ${i+1}`).trim(),officialRanking:null}));
-          if(b.roleCounts)r.roleCounts={frenemy:Number(b.roleCounts.frenemy||0),seer:Number(b.roleCounts.seer||0),madman:Number(b.roleCounts.madman||0)};
+          if(b.roleCounts){
+            const next={};
+            for(const role of ROLE_ORDER)next[role]=Number(b.roleCounts[role]||0);
+            r.roleCounts=normalizeRoleCounts(next);
+          }
           if(b.discussionSeconds)r.discussionSeconds=Math.max(60,Number(b.discussionSeconds));
           sanitizeLiveState(r);
           r.surveySubmissions={};
           r.surveyFinalized=false;
-          r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.discussionSkips={};r.seerChecks={};
+          r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.guardVotes={};r.discussionSkips={};r.seerChecks={};r.compareChecks={};
           return {view:'host'};
         }
         if(parts[4]==='auto'&&req.method==='POST'){
@@ -118,14 +122,15 @@ export default async function handler(req,res){
           return{view:'host'};
         }
         if(parts[4]==='resolve-attack'&&req.method==='POST'){
-          const victim=resolveAttack(r);
-          r.history.push({round:r.roundIndex,kind:'attack',castId:victim.id,name:victim.name});
-          return{json:{victim:victim.name,game:maybeGameOver(r)}};
+          const attack=resolveAttack(r);
+          r.history.push({round:r.roundIndex,kind:'attack',castId:attack.victim.id,name:attack.victim.name,blocked:attack.blocked,guardedBy:attack.guardedBy});
+          if(attack.blocked)r.history.push({round:r.roundIndex,kind:'guard',castId:attack.victim.id,name:attack.victim.name,guardedBy:attack.guardedBy});
+          return{json:{victim:attack.victim.name,blocked:attack.blocked,guardedBy:attack.guardedBy,game:maybeGameOver(r)}};
         }
         if(parts[4]==='eliminate'&&req.method==='POST'){
           const b=await body(req),c=eliminate(r,b.castId);
           r.history.push({round:r.roundIndex,kind:'eliminate',castId:c.id,name:c.name,role:c.role});
-          return{json:{eliminated:{name:c.name,role:c.role,roleLabel:ROLE_LABELS[c.role]},game:maybeGameOver(r)}};
+          return{json:{eliminated:{name:c.name,role:c.role,roleLabel:ROLE_LABELS[c.role],isFrenemySide:isFrenemySide(c.role)},game:maybeGameOver(r)}};
         }
         if(parts[4]==='next-round'&&req.method==='POST'){
           const b=await body(req),game=maybeGameOver(r);
@@ -136,10 +141,10 @@ export default async function handler(req,res){
           return{view:'host'};
         }
         if(parts[4]==='reset'&&req.method==='POST'){
-          r.phase='lobby';r.started=false;r.roundIndex=0;r.timerEndsAt=null;r.seerChecks={};r.history=[];
+          r.phase='lobby';r.started=false;r.roundIndex=0;r.timerEndsAt=null;r.seerChecks={};r.compareChecks={};r.history=[];
           resetRound(r);
           r.roster.forEach(c=>{c.role=null;c.alive=true;});
-          Object.values(r.joins).forEach(j=>j.roleSeen=false);
+          Object.values(r.joins||{}).forEach(j=>j.roleSeen=false);
           return{view:'host'};
         }
         throw Object.assign(new Error('APIが見つかりません'),{status:404});
@@ -199,15 +204,33 @@ export default async function handler(req,res){
           if(cast.role!=='seer'||!cast.alive||r.phase!=='seer')throw new Error('現在は占えません');
           const checks=seerRoundChecks(r);
           if(checks[cast.id])throw new Error('このラウンドではすでに占っています');
-          const b=await body(req),rank=(currentTheme(r).officialRanking||[]).indexOf(b.targetId)+1;
-          if(rank<1)throw new Error('順位が見つかりません');
+          const b=await body(req),target=byCast(r,b.targetId),rank=rankOf(r,b.targetId);
+          if(!target||!rank)throw new Error('順位が見つかりません');
           if(!r.seerChecks)r.seerChecks={};
           const legacy=r.seerChecks[r.roundIndex];
           if(legacy?.seerId)r.seerChecks[r.roundIndex]={[legacy.seerId]:legacy};
           if(!r.seerChecks[r.roundIndex])r.seerChecks[r.roundIndex]={};
-          r.seerChecks[r.roundIndex][cast.id]={seerId:cast.id,targetId:b.targetId,rank};
+          const seenRole=seenRoleFor(target);
+          r.seerChecks[r.roundIndex][cast.id]={seerId:cast.id,targetId:b.targetId,rank,seenRole};
           if(r.autoAdvance)autoAdvance(r);
-          return{json:{targetName:byCast(r,b.targetId)?.name,rank}};
+          return{json:{targetName:target.name,rank,seenRole,seenRoleLabel:ROLE_LABELS[seenRole]}};
+        }
+        if(parts[4]==='compare'&&req.method==='POST'){
+          if(cast.role!=='comparer'||!cast.alive||r.phase!=='seer')throw new Error('現在は比較できません');
+          const checks=compareRoundChecks(r);
+          if(checks[cast.id])throw new Error('このラウンドではすでに比較しています');
+          const b=await body(req),left=byCast(r,b.leftId),right=byCast(r,b.rightId);
+          if(!left||!right||left.id===right.id)throw new Error('比較する2人を選んでください');
+          const leftRank=rankOf(r,left.id),rightRank=rankOf(r,right.id);
+          if(!leftRank||!rightRank)throw new Error('順位が見つかりません');
+          const higherId=leftRank<rightRank?left.id:right.id;
+          if(!r.compareChecks)r.compareChecks={};
+          const legacy=r.compareChecks[r.roundIndex];
+          if(legacy?.comparerId)r.compareChecks[r.roundIndex]={[legacy.comparerId]:legacy};
+          if(!r.compareChecks[r.roundIndex])r.compareChecks[r.roundIndex]={};
+          r.compareChecks[r.roundIndex][cast.id]={comparerId:cast.id,leftId:left.id,rightId:right.id,leftRank,rightRank,higherId};
+          if(r.autoAdvance)autoAdvance(r);
+          return{json:{leftName:left.name,rightName:right.name,leftRank,rightRank,higherName:byCast(r,higherId)?.name}};
         }
         if(parts[4]==='discussion-skip'&&req.method==='POST'){
           if(!cast.alive||r.phase!=='discussion')throw new Error('現在は議論をスキップできません');
@@ -237,6 +260,15 @@ export default async function handler(req,res){
           const b=await body(req),t=byCast(r,b.targetId);
           if(!t||!t.alive||t.role==='frenemy')throw new Error('無効な襲撃先です');
           r.attackVotes[cast.id]=b.targetId;
+          if(r.autoAdvance)autoAdvance(r);
+          return{json:{ok:true}};
+        }
+        if(parts[4]==='guard'&&req.method==='POST'){
+          if(cast.role!=='knight'||!cast.alive||r.phase!=='attack')throw new Error('現在は護衛できません');
+          const b=await body(req),t=byCast(r,b.targetId);
+          if(!t||!t.alive)throw new Error('無効な護衛先です');
+          if(!r.guardVotes)r.guardVotes={};
+          r.guardVotes[cast.id]=b.targetId;
           if(r.autoAdvance)autoAdvance(r);
           return{json:{ok:true}};
         }
