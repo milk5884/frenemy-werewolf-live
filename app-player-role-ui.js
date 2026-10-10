@@ -15,6 +15,11 @@ function fwRoleScreen(state,{tone='action',title,subtitle,icon='✦',body=''}){
 const fwBasePlayerPhaseHtml=playerPhaseHtml;
 playerPhaseHtml=function(state){
   const me=state.player;
+  if(state.phase==='seer'&&me.role==='seer'&&me.alive&&state.seerCheck){
+    return fwRoleScreen(state,{tone:'secret',icon:'🔮',title:'占い結果',subtitle:'対象の事前順位と、占いで見えた役職です。なりすましは市民のように見えます。',body:`
+      <div class="app-target-card"><div class="app-overline">FORTUNE RESULT</div><h2>${esc(state.seerCheck.targetName)}</h2><p>事前 ${state.seerCheck.rank}位 / 見えた役職：${esc(state.seerCheck.seenRoleLabel||'—')}</p></div>
+      <div class="app-action-panel"><button class="secondary full" disabled>占い済み</button></div>`});
+  }
   if(state.phase==='seer'&&me.role==='comparer'&&me.alive){
     if(state.compareCheck){
       return fwRoleScreen(state,{tone:'secret',icon:'⚖️',title:'比較結果',subtitle:'2人のうち、事前アンケート順位が上だった人です。',body:`
@@ -44,7 +49,7 @@ playerPhaseHtml=function(state){
       <div class="app-action-panel"><button class="secondary full" disabled>次のラウンドを待機</button></div>`});
   }
   const html=fwBasePlayerPhaseHtml(state);
-  if(state.phase==='finalVote'&&me.role==='mounter'&&!state.votedFinal&&!state.player?.dead){
+  if(state.phase==='finalVote'&&me.role==='mounter'&&!state.votedFinal){
     return html.replace('<div class="app-action-panel">','<div class="app-mini-secret"><span>マウンター能力</span><b>あなたのランキング投票は2票分として集計されます。</b></div><div class="app-action-panel">');
   }
   if(state.phase==='finalVote'&&me.role==='narcissist'&&!state.votedFinal){
