@@ -139,7 +139,7 @@ function fwSurveyBind(root,state,opts){
           await refreshPlayer(opts.token);
         }else{
           await api(`/api/rooms/${roomCode}/survey?key=${encodeURIComponent(opts.surveyKey)}`,{method:'POST',body:JSON.stringify({deviceId:opts.owner,nickname:flow.nickname||'',votes})});
-          localStorage.setItem(surveyDoneKey(opts.surveyKey),'1');
+          try{localStorage.setItem(surveyDoneKey(opts.surveyKey),'1');}catch(_){}
           fwSurveyClear(key);
           app.innerHTML=shell('<section class="card center fw-survey-thanks"><div class="fw-survey-thanks-icon">✓</div><h2>回答を送信しました</h2><p>ご協力ありがとうございました。</p></section>');
         }
