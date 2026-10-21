@@ -10,7 +10,7 @@ function rankingRevealHtml(reveal){
     </div>
     <ol class="ranking-reveal-list">
       ${reveal.rows.map((r,i)=>`<li class="ranking-reveal-row ${r.rank===1?'first':''} ${!r.alive?'eliminated':''}">
-        <span class="ranking-reveal-place ${r.rank<=3?'medal':''}">${r.rank===1?'♛':r.rank}位</span>
+        <span class="ranking-reveal-place ${r.rank<=3?'medal':''}">${r.rank===1?'♛ 1位':r.rank+'位'}</span>
         <span class="ranking-reveal-person"><strong>${esc(r.name)}</strong>${!r.alive?'<small>脱落</small>':''}</span>
         <span class="ranking-reveal-score">${Number(r.points)||0}<small>pt</small></span>
       </li>`).join('')}
