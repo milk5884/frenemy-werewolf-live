@@ -20,7 +20,7 @@ async function startPlayer(playerToken){
         throw new Error('固定テスト端末の参加者がずれています');
       }
       hideConnectionBanner();
-      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,t:state.timerEndsAt,skip:state.discussionSkipCount,skipped:state.discussionSkipped,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
+      const sig=JSON.stringify({p:state.phase,r:state.roundIndex,me:state.player,rv:state.roundResult,reveal:state.rankingReveal,revealEnabled:state.revealFullRanking,t:state.timerEndsAt,skip:state.discussionSkipCount,skipped:state.discussionSkipped,ff:state.votedFinal,ss:state.votedSuspect,aa:state.attacked,sc:state.seerCheck,survey:state.surveySubmitted,psc:state.playerSurveyCount,la:state.latestAttack,le:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         const debug=fixedCastId?`<div class="test-device-debug">${esc(clientSlot||'test')} / ${esc(state.player?.name||'unknown')}</div>`:'';
