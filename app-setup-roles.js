@@ -21,6 +21,13 @@ openSetupFrom=function(state){
     grid.classList.add('expanded-role-grid');
     grid.innerHTML=FW_ROLE_CONFIG.map(([key,label,desc])=>`<label class="role-count-card expanded"><span>${esc(label)}</span><small>${esc(desc)}</small><input id="rc_${key}" data-role="${key}" type="number" min="${key==='frenemy'?1:0}" value="${Number(rc[key]||0)}"></label>`).join('');
   }
+  const settingMarkup=`<div class="ranking-setting">
+    <div><b>ランキング公開設定</b><p>人気投票の結果発表時に、事前アンケートの全順位を公開するか選べます。投票前は公開されません。</p></div>
+    <label class="ranking-toggle"><input id="revealFullRanking" type="checkbox" ${state.revealFullRanking?'checked':''}><span>結果発表時に全ランキングを公開</span></label>
+  </div>`;
+  const discussionField=document.querySelector('.setup-side .setup-field');
+  if(discussionField)discussionField.insertAdjacentHTML('beforebegin',settingMarkup);
+  else grid?.insertAdjacentHTML('afterend',settingMarkup);
   const save=document.getElementById('saveSetup');
   if(save)save.onclick=async()=>{
     const roster=[...document.querySelectorAll('#rosterEdit input')].map((x,i)=>({id:x.dataset.id||`c_${i}`,name:x.value.trim()})).filter(x=>x.name);
@@ -33,7 +40,7 @@ openSetupFrom=function(state){
     const total=Object.values(roleCounts).reduce((a,b)=>a+Number(b||0),0);
     if(total>=roster.length)return notify('役職数の合計は出演者数未満にしてください。残りは市民になります。');
     try{
-      await api(hostUrl('/setup'),{method:'POST',body:JSON.stringify({roster,themes,roleCounts,discussionSeconds:Number(document.getElementById('discussionSec').value||300)})});
+      await api(hostUrl('/setup'),{method:'POST',body:JSON.stringify({roster,themes,roleCounts,discussionSeconds:Number(document.getElementById('discussionSec').value||300),revealFullRanking:!!document.getElementById('revealFullRanking')?.checked})});
       setupOpen=false;editingSetup=false;lastHostSig='';await startHost();
     }catch(e){notify(e.message)}
   };
