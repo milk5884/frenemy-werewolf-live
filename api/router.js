@@ -97,10 +97,17 @@ export default async function handler(req,res){
             r.roleCounts=normalizeRoleCounts(next);
           }
           if(b.discussionSeconds)r.discussionSeconds=Math.max(60,Number(b.discussionSeconds));
+          if(typeof b.revealFullRanking==='boolean')r.revealFullRanking=b.revealFullRanking;
           sanitizeLiveState(r);
           r.surveySubmissions={};
           r.surveyFinalized=false;
           r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.guardVotes={};r.discussionSkips={};r.seerChecks={};r.compareChecks={};r.spooferActions={};
+          return {view:'host'};
+        }
+        if(parts[4]==='ranking-visibility'&&req.method==='POST'){
+          const b=await body(req);
+          if(typeof b.revealFullRanking!=='boolean')throw new Error('公開設定が不正です');
+          r.revealFullRanking=b.revealFullRanking;
           return {view:'host'};
         }
         if(parts[4]==='auto'&&req.method==='POST'){
