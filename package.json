@@ -8,6 +8,7 @@
     "@vercel/blob": "^2.0.0"
   },
   "scripts": {
-    "check": "for file in api/*.js lib/*.js app-*.js; do node --check \"$file\" || exit 1; done"
+    "check": "for file in api/*.js lib/*.js app-*.js tests/*.js; do node --check \"$file\" || exit 1; done",
+    "test": "node --test tests/*.test.js"
   }
 }
