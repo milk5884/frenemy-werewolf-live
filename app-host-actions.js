@@ -6,7 +6,7 @@ async function startHost(){
     try{
       const state=await api(hostUrl(''));
       hideConnectionBanner();
-      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,autoAdvance:state.autoAdvance,revealFullRanking:state.revealFullRanking,rankingReveal:state.rankingReveal,phaseChangedAt:state.phaseChangedAt,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,discussionSkipCount:state.discussionSkipCount,discussionSkips:state.discussionSkips,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started,latestAttack:state.latestAttack,latestElimination:state.latestElimination});
+      const sig=JSON.stringify({phase:state.phase,round:state.roundIndex,autoAdvance:state.autoAdvance,revealFullRanking:state.revealFullRanking,rankingReveal:state.rankingReveal,correctVoteProtection:state.correctVoteProtection,attackableTargetCount:state.attackableTargetCount,phaseChangedAt:state.phaseChangedAt,roster:state.roster,themes:state.themes,survey:state.surveyCount,playerSurvey:state.playerSurveyCount,surveyFinalized:state.surveyFinalized,discussionSkipCount:state.discussionSkipCount,discussionSkips:state.discussionSkips,final:state.finalVotes,suspect:state.suspectVotes,night:state.attackVotes,result:state.roundResult,timer:state.timerEndsAt,started:state.started,latestAttack:state.latestAttack,latestElimination:state.latestElimination});
       if(sig!==lastHostSig || document.querySelector('[data-timer-end]')){
         lastHostSig=sig;
         app.innerHTML=shell(hostDashboard(state),`<div class="room-code">${esc(state.code)}</div>`);
@@ -31,6 +31,16 @@ function bindHost(state){
       notify(!state.revealFullRanking?'全ランキング公開をONにしました':'全ランキング公開をOFFにしました');
       lastHostSig='';await startHost();
     }catch(e){rankingToggle.disabled=false;notify(e.message);}
+  };
+  const attackProtectionToggle=document.getElementById('attackProtectionToggle');
+  if(attackProtectionToggle)attackProtectionToggle.onclick=async()=>{
+    if(state.started)return notify('開始済みゲームのルールは変更できません');
+    attackProtectionToggle.disabled=true;
+    try{
+      await api(hostUrl('/attack-protection'),{method:'POST',body:JSON.stringify({correctVoteProtection:!state.correctVoteProtection})});
+      notify(!state.correctVoteProtection?'1位正解の襲撃防御をONにしました':'1位正解の襲撃防御をOFFにしました');
+      lastHostSig='';await startHost();
+    }catch(e){attackProtectionToggle.disabled=false;notify(e.message);}
   };
   const autoStep=document.getElementById('autoStepNow'); if(autoStep)autoStep.onclick=async()=>{try{await api(hostUrl('/auto-step'),{method:'POST',body:'{}'});lastHostSig='';await startHost();}catch(e){notify(e.message)}};
   const testReady=document.getElementById('testReady'); if(testReady)testReady.onclick=async()=>{try{await api(hostUrl('/test-ready'),{method:'POST',body:'{}'});notify('テスト準備を完了しました');lastHostSig='';await startHost();}catch(e){notify(e.message)}};
