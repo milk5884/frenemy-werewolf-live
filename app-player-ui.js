@@ -76,7 +76,7 @@ function playerPhaseHtml(state){
     if(dead) return appScreen(state,{kicker:'RANKING VOTE',title:'ランキング投票',subtitle:'脱落中のため投票権はありません。',tone:'wait',body:waitCard('投票待機','結果をお待ちください。','🗳️')});
     if(state.votedFinal) return appScreen(state,{kicker:'VOTED',title:'投票完了',subtitle:'全員の投票が終わるまでお待ちください。',tone:'ready',body:waitCard('送信しました','投票内容は反映されています。','✓')});
     body=actionPanel(`<label class="app-select-label">1位だと思う人物<select id="finalTarget"><option value="">選択してください</option>${selectOptions(alivePlayers(state),finalDraft)}</select></label><button class="big full" id="finalVoteBtn">投票を確定</button>`);
-    return appScreen(state,{kicker:'RANKING VOTE',title:'1位を選ぶ',subtitle:'今回のテーマで一番当てはまる人物を選んでください。',tone:'action',body});
+    return appScreen(state,{kicker:'RANKING VOTE',title:'1位を選ぶ',subtitle:state.correctVoteProtection?'本当の1位を当てると、今夜のフレネミー襲撃から守られます。':'今回のテーマで一番当てはまる人物を選んでください。',tone:'action',body});
   }
   if(state.phase==='result'&&state.roundResult){
     const rr=state.roundResult; const success=rr.success;
