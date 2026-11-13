@@ -80,21 +80,32 @@ function playerPhaseHtml(state){
   }
   if(state.phase==='result'&&state.roundResult){
     const rr=state.roundResult; const success=rr.success;
-    body=`<div class="app-result-hero ${success?'bad':'good'}"><span>${success?'😈':'🛡️'}</span><h2>${success?'フレネミー成功':'フレネミー失敗'}</h2><p>ターゲット：${esc(rr.officialTopName||'—')}</p></div>${voteResultTable(rr)}`;
+    const shieldMessage=state.correctVoteProtection&&me.alive?
+      (state.protectedByCorrectVote?
+        `<div class="app-mini-secret"><span>🛡️ 1位を正解！</span><b>${success?'今夜、あなたはフレネミーに襲撃されません。':'あなたは正しく1位を予想しました。'}</b></div>`:
+        (success&&me.role!=='frenemy'?`<div class="app-mini-secret"><span>1位は不正解</span><b>今夜、あなたは襲撃対象になる可能性があります。</b></div>`:''))
+      :'';
+    const noTargetMessage=state.attackSkippedForCorrectVotes?
+      `<div class="app-mini-secret"><span>今夜の襲撃</span><b>襲撃できる人がいないため、襲撃はありません。</b></div>`:'';
+    body=`<div class="app-result-hero ${success?'bad':'good'}"><span>${success?'😈':'🛡️'}</span><h2>${success?'フレネミー成功':'フレネミー失敗'}</h2><p>ターゲット：${esc(rr.officialTopName||'—')}</p></div>${shieldMessage}${noTargetMessage}${voteResultTable(rr)}`;
     return appScreen(state,{kicker:'ROUND RESULT',title:'結果発表',subtitle:`最終投票1位：${rr.winnerNames.map(esc).join(' / ')||'—'}`,tone:'result',body});
   }
   if(state.phase==='attack'){
     if(me.role==='frenemy'&&me.alive){
       if(state.attacked) return appScreen(state,{kicker:'NIGHT ACTION',title:'襲撃先を選択済み',subtitle:'仲間の選択を待っています。',tone:'ready',body:waitCard('選択済み','襲撃先が一致すると成立します。','🌙')});
       const partners=new Set((state.frenemyPartners||[]).map(x=>x.id));
-      const targets=state.roster.filter(c=>c.alive&&c.id!==me.id&&!partners.has(c.id));
-      body=actionPanel(`<label class="app-select-label">襲撃する人物<select id="attackTarget"><option value="">選択してください</option>${selectOptions(targets,attackDraft)}</select></label><button class="danger big full" id="attackBtn">襲撃先を決定</button>`);
+      const targets=Array.isArray(state.attackableTargets)?state.attackableTargets:state.roster.filter(c=>c.alive&&c.id!==me.id&&!partners.has(c.id));
+      if(!targets.length)return appScreen(state,{kicker:'NIGHT ACTION',title:'襲撃対象なし',subtitle:'1位正解者は襲撃から保護されています。進行をお待ちください。',tone:'wait',body:waitCard('今夜は襲撃できません','フレネミー投票へ進みます。','🛡️')});
+      body=actionPanel(`${state.correctVoteProtection?'<p class="muted">1位を正解した人は選択できません。</p>':''}<label class="app-select-label">襲撃する人物<select id="attackTarget"><option value="">選択してください</option>${selectOptions(targets,attackDraft)}</select></label><button class="danger big full" id="attackBtn">襲撃先を決定</button>`);
       return appScreen(state,{kicker:'NIGHT ACTION',title:'夜の行動',subtitle:'襲撃先を選んでください。',tone:'secret',body});
     }
+    if(state.protectedByCorrectVote)return appScreen(state,{kicker:'NIGHT',title:'正解者は守られています',subtitle:'あなたは1位を正解したため、今夜は襲撃されません。',tone:'ready',body:waitCard('🛡️ 襲撃から保護','ただし追放投票は通常どおり行われます。','🛡️')});
     return appScreen(state,{kicker:'NIGHT',title:'夜になりました',subtitle:'フレネミーが行動しています。',tone:'wait',body:waitCard('夜の時間','結果までお待ちください。','🌙')});
   }
   if(state.phase==='suspectVote'){
-    const dawnText=state.latestAttack?.name?`${state.latestAttack.name} が襲撃されました。`:'襲撃結果を確認してください。';
+    const dawnText=state.latestAttack?.name?
+      (state.latestAttack.blocked?`${state.latestAttack.name} への襲撃は騎士に防がれました。`:`${state.latestAttack.name} が襲撃されました。`):
+      (state.attackSkippedForCorrectVotes?'1位正解者が守られ、今夜の襲撃はありませんでした。':'今夜は襲撃がありませんでした。');
     if(dead) return appScreen(state,{kicker:'FRENEMY VOTE',title:'フレネミー投票',subtitle:'脱落中のため投票できません。',tone:'wait',body:waitCard('投票待機',dawnText,'🌅')});
     if(state.votedSuspect) return appScreen(state,{kicker:'VOTED',title:'投票完了',subtitle:'結果をお待ちください。',tone:'ready',body:waitCard('送信しました',dawnText,'✓')});
     const targets=alivePlayers(state).filter(c=>c.id!==me.id);
