@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 import { createRoomPersisted, loadRoom, updateRoom, storageMode } from '../lib/storage.js';
-import { ROLE_LABELS, ROLE_ORDER, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks, compareRoundChecks, spooferRoundActions, spooferUsed, normalizeRoleCounts, rankOf, compareInfo, isFrenemySide } from '../lib/game.js';
+import { ROLE_LABELS, ROLE_ORDER, token, id, createRoom, publicRoom, hostView, playerView, finalizeSurvey, byCast, joinedByToken, startGame, setPhase, resolveAttack, eliminate, maybeGameOver, resetRound, playerSurveyKey, playerSurveyCount, autoAdvance, seerRoundChecks, compareRoundChecks, spooferRoundActions, spooferUsed, normalizeRoleCounts, rankOf, compareInfo, isFrenemySide, attackableTargets } from '../lib/game.js';
 
 function send(res,status,obj){
   res.statusCode=status;
@@ -98,10 +98,18 @@ export default async function handler(req,res){
           }
           if(b.discussionSeconds)r.discussionSeconds=Math.max(60,Number(b.discussionSeconds));
           if(typeof b.revealFullRanking==='boolean')r.revealFullRanking=b.revealFullRanking;
+          if(typeof b.correctVoteProtection==='boolean')r.correctVoteProtection=b.correctVoteProtection;
           sanitizeLiveState(r);
           r.surveySubmissions={};
           r.surveyFinalized=false;
           r.finalVotes={};r.suspectVotes={};r.attackVotes={};r.guardVotes={};r.discussionSkips={};r.seerChecks={};r.compareChecks={};r.spooferActions={};
+          return {view:'host'};
+        }
+        if(parts[4]==='attack-protection'&&req.method==='POST'){
+          const b=await body(req);
+          if(r.started)throw new Error('襲撃防御ルールはゲーム開始前に設定してください');
+          if(typeof b.correctVoteProtection!=='boolean')throw new Error('襲撃防御設定が不正です');
+          r.correctVoteProtection=b.correctVoteProtection;
           return {view:'host'};
         }
         if(parts[4]==='ranking-visibility'&&req.method==='POST'){
@@ -134,6 +142,7 @@ export default async function handler(req,res){
           return{view:'host'};
         }
         if(parts[4]==='resolve-attack'&&req.method==='POST'){
+          if(!attackableTargets(r).length)return{json:{noEligibleTargets:true,game:maybeGameOver(r)}};
           const attack=resolveAttack(r);
           r.history.push({round:r.roundIndex,kind:'attack',castId:attack.victim.id,name:attack.victim.name,blocked:attack.blocked,guardedBy:attack.guardedBy});
           if(attack.blocked)r.history.push({round:r.roundIndex,kind:'guard',castId:attack.victim.id,name:attack.victim.name,guardedBy:attack.guardedBy});
@@ -286,7 +295,7 @@ export default async function handler(req,res){
         if(parts[4]==='attack'&&req.method==='POST'){
           if(cast.role!=='frenemy'||!cast.alive||r.phase!=='attack')throw new Error('現在は襲撃できません');
           const b=await body(req),t=byCast(r,b.targetId);
-          if(!t||!t.alive||t.role==='frenemy')throw new Error('無効な襲撃先です');
+          if(!t||!attackableTargets(r).some(x=>x.id===t.id))throw new Error('この人は襲撃できません。1位正解者は保護されます');
           r.attackVotes[cast.id]=b.targetId;
           if(r.autoAdvance)autoAdvance(r);
           return{json:{ok:true}};
